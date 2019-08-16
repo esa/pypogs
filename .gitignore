@@ -1,3 +1,7 @@
+# Documents
+/docs/_*
+/docs/*.log
+
 # System data and debug
 /pypogs/data/*
 /pypogs/debug/*
