@@ -1,0 +1,3 @@
+[submodule "tetra3"]
+	path = tetra3
+	url = https://github.com/esa/tetra3.git

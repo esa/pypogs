@@ -1,0 +1,4 @@
+# System data and debug
+/pypogs/data/*
+/pypogs/debug/*
+/pypogs/_*
