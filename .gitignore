@@ -2,7 +2,18 @@
 /docs/_*
 /docs/*.log
 
+# Cache
+*__pycache__*
+
 # System data and debug
 /pypogs/data/*
 /pypogs/debug/*
 /pypogs/_*
+
+# Builds
+/build/*
+/dist/*
+*egg-info*
+
+# Settings
+/setup.cfg
