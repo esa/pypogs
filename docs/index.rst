@@ -3,24 +3,13 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to pypogs
-=================
-The package level instructions are still to be written, but each module/class is documented here.
+.. include ../README.rst
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 3
    :caption: Contents:
    
+   self
    installation
    gui_instructions
    api_docs
-
-
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
