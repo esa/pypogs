@@ -31,6 +31,7 @@ License:
 from pathlib import Path
 import logging
 from threading import Thread
+from csv import writer as csv_write
 
 # External imports:
 import numpy as np
@@ -39,7 +40,6 @@ from astropy import units as apy_unit, coordinates as apy_coord, utils as apy_ut
 from skyfield import sgp4lib as sgp4
 from skyfield import api as sf_api
 from tifffile import imwrite as tiff_write
-from csv import writer as csv_write
 
 # Internal imports:
 from tetra3 import Tetra3
@@ -108,8 +108,8 @@ class System:
     Settings for closed loop tracking:
         When a coarse or fine Camera object is added, a corresponding tracking thread (e.g.
         :attr:`coarse_track_thread` for :attr:`coarse_camera`) is also created. This is a
-        :class:`pypogs.TrackingThread` object which also holds a `pypogs.SpotTracker` object
-        (accessible via :attr:`coarse_track_thread.spot_tracker). The parameters for these (see
+        :class:`pypogs.TrackingThread` object which also holds a :class:`pypogs.SpotTracker` object
+        (accessible via :attr:`coarse_track_thread.spot_tracker`). The parameters for these (see
         respective documentation) are used to set up the detection for tracking. For best
         performance it is critical to set up these well.
 
@@ -147,8 +147,8 @@ class System:
         :attr:`target` references the :class:`pypogs.Target` instance (auto created) which holds
         the target and (optional) tracking start and end times. The target may be set directly to
         an *astropy SkyCoord* or a *skyfield EarthSatellite* by :meth:`target.set_target` or these
-        can be created by pypogs by e.g. calling :attr:`target`.:meth:`set_target_from_tle` with a
-        Two Line Element (TLE) for a satellite or :attr: target .:meth:`set_target_from_ra_dec`
+        can be created by pypogs by e.g. calling :meth:`target.set_target_from_tle` with a
+        Two Line Element (TLE) for a satellite or :meth:`target.set_target_from_ra_dec`
         with right ascension and declination (in decimal degrees) for a star.
 
         Example satellite:
@@ -239,12 +239,12 @@ class System:
         """Destructor. Calls deinitialize()."""
         try:
             self._logger.debug('System destructor called')
-        except Exception:
+        except BaseException:
             pass
         try:
             self.deinitialize()
             self._logger.debug('Deinitialised')
-        except Exception:
+        except BaseException:
             pass
 
     def initialize(self):
@@ -256,7 +256,7 @@ class System:
                 try:
                     self.star_camera.initialize()
                     self._logger.debug('Initialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to init', exc_info=True)
             else:
                 self._logger.debug('Already initialised')
@@ -266,7 +266,7 @@ class System:
                 try:
                     self.coarse_camera.initialize()
                     self._logger.debug('Initialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to init', exc_info=True)
             else:
                 self._logger.debug('Already initialised')
@@ -276,7 +276,7 @@ class System:
                 try:
                     self.fine_camera.initialize()
                     self._logger.debug('Initialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to init', exc_info=True)
             else:
                 self._logger.debug('Already initialised')
@@ -286,7 +286,7 @@ class System:
                 try:
                     self.mount.initialize()
                     self._logger.debug('Initialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to init', exc_info=True)
             else:
                 self._logger.debug('Already initialised')
@@ -296,7 +296,7 @@ class System:
                 try:
                     self.receiver.initialize()
                     self._logger.debug('Initialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to init', exc_info=True)
             else:
                 self._logger.debug('Already initialised')
@@ -311,7 +311,7 @@ class System:
                 try:
                     self.star_camera.deinitialize()
                     self._logger.debug('Deinitialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to deinit', exc_info=True)
             else:
                 self._logger.debug('Not initialised')
@@ -321,7 +321,7 @@ class System:
                 try:
                     self.coarse_camera.deinitialize()
                     self._logger.debug('Deinitialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to deinit', exc_info=True)
             else:
                 self._logger.debug('Not initialised')
@@ -331,7 +331,7 @@ class System:
                 try:
                     self.fine_camera.deinitialize()
                     self._logger.debug('Deinitialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to deinit', exc_info=True)
             else:
                 self._logger.debug('Not initialised')
@@ -341,7 +341,7 @@ class System:
                 try:
                     self.mount.deinitialize()
                     self._logger.debug('Deinitialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to deinit', exc_info=True)
             else:
                 self._logger.debug('Not initialised')
@@ -351,7 +351,7 @@ class System:
                 try:
                     self.receiver.deinitialize()
                     self._logger.debug('Deinitialised')
-                except Exception:
+                except BaseException:
                     self._logger.warning('Failed to deinit', exc_info=True)
             else:
                 self._logger.debug('Not initialised')
@@ -446,7 +446,7 @@ class System:
             try:
                 self.star_camera.deinitialize()
                 self._logger.debug('Deinit')
-            except Exception:
+            except BaseException:
                 self._logger.debug('Failed to deinit', exc_info=True)
             self._star_cam = None
             self._logger.debug('Cleared')
@@ -495,7 +495,7 @@ class System:
         try:
             self.star_camera = self.coarse_camera
             return self.star_camera
-        except Exception:
+        except BaseException:
             self._logger.debug('Could not link star from coarse: ', exc_info=True)
             return None
 
@@ -521,7 +521,7 @@ class System:
             try:
                 self.coarse_camera.deinitialize()
                 self._logger.debug('Deinit')
-            except Exception:
+            except BaseException:
                 self._logger.debug('Failed to deinit', exc_info=True)
             self._coarse_track_thread.camera = None
             self._logger.debug('Cleared')
@@ -575,7 +575,7 @@ class System:
         try:
             self.coarse_camera = self.star_camera
             return self.coarse_camera
-        except Exception:
+        except BaseException:
             self._logger.debug('Could not link coarse from star: ', exc_info=True)
             return None
 
@@ -601,7 +601,7 @@ class System:
             try:
                 self.fine_camera.deinitialize()
                 self._logger.debug('Deinit')
-            except Exception:
+            except BaseException:
                 self._logger.debug('Failed to deinit', exc_info=True)
             self._fine_track_thread.camera = None
             self._logger.debug('Cleared')
@@ -676,7 +676,7 @@ class System:
             try:
                 self.receiver.deinitialize()
                 self._logger.debug('Deinit')
-            except Exception:
+            except BaseException:
                 self._logger.debug('Failed to deinit', exc_info=True)
             self._receiver = None
             self._logger.debug('Cleared')
@@ -725,7 +725,7 @@ class System:
             try:
                 self.mount.deinitialize()
                 self._logger.debug('Deinit')
-            except Exception:
+            except BaseException:
                 self._logger.debug('Failed to deinit', exc_info=True)
             self._mount = None
             self._logger.debug('Cleared')
@@ -957,18 +957,18 @@ class System:
         self._logger.info('Stop command received.')
         try:
             self.control_loop_thread.stop()
-        except Exception:
+        except BaseException:
             self._logger.warning('Failed to stop control loop thread.', exc_info=True)
         if self._thread is not None and self._thread.is_alive:
             self._stop_loop = True
             try:
                 self._thread.join()
-            except Exception:
+            except BaseException:
                 self._logger.warning('Failed to join system worker thread.', exc_info=True)
         if self.mount is not None and self.mount.is_init:
             try:
                 self.mount.stop()
-            except Exception:
+            except BaseException:
                 self._logger.warning('Failed to stop mount.', exc_info=True)
 
     def do_alignment_test(self, max_trials=2, rate_control=True):

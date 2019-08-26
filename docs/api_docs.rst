@@ -1,5 +1,9 @@
-API for pypogs Core
-===================
+API reference
+=============
+
+This reference is auto-generated from the source code in the
+`pypogs GitHub repository <https://github.com/esa/pypogs>`_. General instructions are avilable at
+the `pypogs ReadTheDocs website <https://pypogs.readthedocs.io/en/latest/>`_.
 
 .. automodule:: pypogs.system
 .. autoclass:: pypogs.System
@@ -24,6 +28,3 @@ API for pypogs Core
    :members:
 .. autoclass:: pypogs.Receiver
    :members:
-   
-.. automodule:: pypogs.gui
-.. autoclass:: pypogs.GUI
