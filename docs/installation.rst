@@ -74,9 +74,7 @@ is the GitHub version of pypogs).
 
 If you find that `pypogs/tetra3` is empty (due to cloning without recursion), get it by::
 
-    git submodule --init
-    git submodule --pull
-
+    git submodule update --init
 
 If a new update has come to GitHub you can update yourself by
 typing::
