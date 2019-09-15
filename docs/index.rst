@@ -11,5 +11,6 @@
    
    self
    installation
+   fpa_build
    gui_instructions
    api_docs
