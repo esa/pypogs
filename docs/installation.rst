@@ -101,7 +101,7 @@ To install the requirements open a terminal/CMD window in the pypogs directory a
 to install all requirements. Test that everything works by running an example::
 
     cd examples
-    python test_pypogs.py
+    python run_pypogsGUI.py
     
 which should create an instace of pypogs and open the Graphical User Interface for you.
 
@@ -120,9 +120,25 @@ Use `model='celestron'` in pypogs. No extra drivers or packages are neccessary.
 Camera: FLIR/PointGrey
 ^^^^^^^^^^^^^^^^^^^^^^
 Use `model='ptgrey'` in pypogs. You will need both the `FLIR Spinnaker` drivers and the `pyspin`
-Python package.
-
-TODO: Detailed steps.
+Python package. How to install:
+	
+    1. Go to `FLIR's Spinnaker page <https://www.flir.com/products/spinnaker-sdk/>`_, and click
+       `Download Now` to go to their "download box". Download 
+       `Latest Spinnaker Full SDK/SpinnakerSDK_FULL_{...}.exe` for your system
+       (most likely Windows x64), and `Latest Python Spinnaker/spinnaker_python-{....}.zip`. Take 
+       note that the python .zip should say `cp37` (for Python 3.7) and `amd64` for x64 system or
+       `win32` for x86 system (matching the SpinnakerSDK you downloaded previously).  
+    2. Run the Spinnaker SDK installer, "Camera Evaluation" mode is sufficient for our needs.
+    3. Run the newly installed SpinView program and make sure your camera(s) work as expected.
+    4. Extract the contents of the spinnaker_python .zip archive.
+    5. Open a terminal/CMD window (or Anaconda Prompt); activate your pypogs_env environment. Go to
+       the extracted .zip archive, where the file `spinnaker_python-{...}.whl` is located.
+    6. Install the package by::
+           
+           pip install spinnaker_python-{...}.whl
+	
+You should now be ready to load and use your FLIR/PointGrey camera! Try running the GUI and add the
+camera with model `ptgrey` and the serial number printed on the camera (and shown in SpinView).
 
 Receiver: National Instruments DAQ
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
