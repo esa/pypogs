@@ -19,8 +19,8 @@ Parts needed
 All optomechanics and optics may be ordered from `ThorLabs <https://www.thorlabs.com/>`_ except
 for the adapter to a telescope eyepice barrel. Your telescope vendor should have such an item.
 
-Base items:
-^^^^^^^^^^^
+Base items
+^^^^^^^^^^
 
     - SC6W; 16 mm Cage Cube; 1pc
     - SM05CP2; SM05 End Cap; 1pc 
@@ -39,8 +39,8 @@ Base items:
     | \*\* May need to adjust length based on focal length `f3`.
     | \*\*\* May need to adjust length based on focal length `f2`.
     
-Optics and mounts:
-^^^^^^^^^^^^^^^^^^
+Optics and mounts
+^^^^^^^^^^^^^^^^^
 For lenses `f2` and `f3` a lens with diameter 1" or less (1/2" recommended) may be used. For your
 chosen lens diameter, get an appropriate `SM1A{...}` adapter from the category "Mounting Adapters
 with Internal and External Threads".
@@ -62,8 +62,8 @@ A recommended setup would be:
     - AC080-010-B; f=10mm, 8mm Achromatic Doublet; 1pc (`f4`)
     - BS071; 90:10 (R:T) beam-splitter 10mm cube; 1pc
 
-Extras:
-^^^^^^^
+Extras
+^^^^^^
 It is recommended to get some glue (e.g. cyanoacrylate) to permanently bond the beam-splitter to the
 cage prism mount for stability, and matte-black aluminium foil to shield the FPA from stray light.
 
