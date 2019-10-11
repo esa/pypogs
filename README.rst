@@ -23,3 +23,11 @@ MEO/GEO satellites, with 4 arcsecond RMS tracking of LEO satellites. With this p
 can launch the received signal into a 50µm and 150µm core diameter multimode fibre respectively with
 the proposed FPA. We require no modifications to the telescope nor a fine steering mirror for these
 results; pypogs will enable the lowest cost high-performance optical ground stations yet.
+
+An article describing the system will be presented at IEEE ICSOS in 2019. The GitHub respository
+includes a preprint (to be updated after publication). If you find pypogs useful in your work,
+please cite:
+
+G. M. Pettersson, J. Perdigues, and Z. Sodnik, "Unmodified Portable Telescope for Space-to-Ground
+Optical Links," in *Proc. IEEE International Conference on Space Optical Systems and Applications
+(ICSOS)*, 2019.
