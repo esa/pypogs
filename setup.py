@@ -10,7 +10,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=['numpy >= 1.17.0',
                       'scipy >= 1.3.1',
-                      'Pillow >= 6.1.0',
+                      'Pillow >= 6.2.0',
                       'skyfield >= 1.11',
                       'astropy >= 3.2.1',
                       'pyserial >= 3.4',
