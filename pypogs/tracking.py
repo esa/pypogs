@@ -1338,7 +1338,7 @@ class TrackingThread:
             # Wait for a while
             time.sleep(2)
             # Read the position
-            print(tt.track_x_y)
+            print(tt.track_alt_az)
             # Stop the tracker
             tt.stop()
             # Deinitialise the camera
