@@ -1327,8 +1327,8 @@ class TrackingThread:
             # Create a TrackingThread instance
             tt = pypogs.TrackingThread(camera=cam, name='CoarseTrackThread')
             # Set up tracking parameters (see SpotTracker in this module for details)
-            tt.spot_tracker.position_max_sd = 100
-            tt.spot_tracker.position_min_sd = 20
+            tt.spot_tracker.max_search_radius = 500
+            tt.spot_tracker.min_search_radius = 100
             tt.spot_tracker.position_sigma = 5
             # (Optional) set up a directory for image saving at .5 Hz
             tt.image_folder = Path('./tracking_images')
