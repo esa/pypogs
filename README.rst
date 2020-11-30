@@ -8,7 +8,7 @@ and track satellites with closed-loop camera feedback. Additionally we include i
 to build a fibre-coupling Focal Plane Assembly (FPA) replacing the eyepiece in any unmodified
 portable telescope.
 
-pypogs includes a platform idenpendent Graphical User Interface (GUI) to manage alignment, tracking
+pypogs includes a platform independent Graphical User Interface (GUI) to manage alignment, tracking
 feedback, and hardware settings. The GUI controls the pypogs core through a public API (see
 documentation); pypogs may be controlled fully from the command line as well.
 
@@ -25,7 +25,7 @@ the proposed FPA. We require no modifications to the telescope nor a fine steeri
 results; pypogs will enable the lowest cost high-performance optical ground stations yet.
 
 An article describing the system was presented at IEEE ICSOS in 2019, the paper is
-`available here <https://ieeexplore.ieee.org/abstract/document/8978992>`_. The GitHub respository
+`available here <https://ieeexplore.ieee.org/abstract/document/8978992>`_. The GitHub repository
 includes a preprint. If you find pypogs useful in your work, please cite:
 
 G. M. Pettersson, J. Perdigues, and Z. Sodnik, "Unmodified Portable Telescope for Space-to-Ground
