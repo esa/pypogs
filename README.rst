@@ -19,12 +19,12 @@ Source Software released by the European Space Agency under the Apache License 2
 in the repository for full licensing details.
 
 Performance will vary. Our testing shows approximately 1 arcsecond RMS tracking of stars and 
-MEO/GEO satellites, with 4 arcsecond RMS tracking of LEO satellites. With this performance you
+MEO/GEO satellites, with 4 arcseconds RMS tracking of LEO satellites. With this performance you
 can launch the received signal into a 50µm and 150µm core diameter multimode fibre respectively with
 the proposed FPA. We require no modifications to the telescope nor a fine steering mirror for these
 results; pypogs will enable the lowest cost high-performance optical ground stations yet.
 
-An article describing the system was presented at IEEE ICSOS in 2019, the paper is
+An article describing the system was presented at IEEE ICSOS in 2019; the paper is
 `available here <https://ieeexplore.ieee.org/abstract/document/8978992>`_. The GitHub respository
 includes a preprint. If you find pypogs useful in your work, please cite:
 
