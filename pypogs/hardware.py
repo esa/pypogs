@@ -1,7 +1,7 @@
 """Hardware interfaces
 ======================
 
-Current harware support:
+Current hardware support:
     - :class:`pypogs.Camera`: 'ptgrey' for FLIR (formerly Point Grey) machine vision cameras. Requires Spinnaker API and PySpin, see the
       installation instructions. Tested with Blackfly S USB3 model BFS-U3-31S4M.
 
@@ -49,7 +49,7 @@ class Camera:
     auto_init=False is passed). Manually initialise with a call to Camera.initialize(); release hardware with a call to
     Camera.deinitialize().
 
-    After the Camera is intialised, acquisition properties (e.g. exposure_time and frame_rate) may be set and images
+    After the Camera is initialised, acquisition properties (e.g. exposure_time and frame_rate) may be set and images
     received. The Camera also supports event-driven acquisition, see Camera.add_event_callback(), where new images are
     automatically passed on to the desired functions.
 
@@ -234,7 +234,7 @@ class Camera:
     @model.setter
     def model(self, model):
         self._log_debug('Setting model to: '+str(model))
-        assert not self.is_init, 'Can not change already intialised device model'
+        assert not self.is_init, 'Can not change already initialised device model'
         model = str(model)
         assert model.lower() in self._supported_models,\
                                                 'Model type not recognised, allowed: '+str(self._supported_models)
@@ -253,7 +253,7 @@ class Camera:
     @identity.setter
     def identity(self, identity):
         self._log_debug('Setting identity to: '+str(identity))
-        assert not self.is_init, 'Can not change already intialised device'
+        assert not self.is_init, 'Can not change already initialised device'
         assert self.model is not None, 'Must define model first'
         identity = str(identity)
         if self.model.lower() == 'ptgrey':
@@ -1097,9 +1097,9 @@ class Camera:
         The method should have the signature (image, timestamp, \*args, \*\*kwargs) where:
 
         - image (numpy.ndarray): The image data as a 2D numpy array.
-        - timestamp (datetime.datetime): UTC timestamp when the image event occured (i.e. when the capture
+        - timestamp (datetime.datetime): UTC timestamp when the image event occurred (i.e. when the capture
           finished).
-        - \*args, \*\*kwargs should be allowed for forward compatability.
+        - \*args, \*\*kwargs should be allowed for forward compatibility.
 
         The callback should *not* be used for computations, make sure the method returns as fast as possible.
 
@@ -1281,7 +1281,7 @@ class Mount:
 
     Note:
         The Mount class allows two modes of control for moving to positions. The default is rate_control=True, where
-        this class will continously send rate commands until the desired position is reached. It is possible to use the
+        this class will continuously send rate commands until the desired position is reached. It is possible to use the
         internal motion controller in the mount by passing rate_control=False. However, it is slow and implements
         backlash compensation. In our testing the accuracy difference is negligible so the default is recommended.
     """
@@ -1417,7 +1417,7 @@ class Mount:
     @model.setter
     def model(self, model):
         self._logger.debug('Setting model to: '+str(model))
-        assert not self.is_init, 'Can not change already intialised device model'
+        assert not self.is_init, 'Can not change already initialised device model'
         model = str(model)
         assert model.lower() in self._supported_models,\
                                                 'Model type not recognised, allowed: '+str(self._supported_models)
@@ -1440,7 +1440,7 @@ class Mount:
     @identity.setter
     def identity(self, identity):
         self._logger.debug('Setting identity to: '+str(identity))
-        assert not self.is_init, 'Can not change already intialised device'
+        assert not self.is_init, 'Can not change already initialised device'
         assert isinstance(identity, (str, int)), 'Identity must be a string or an int'
         assert self.model is not None, 'Must define model first'
         if self.model == 'celestron':
@@ -1656,7 +1656,7 @@ class Mount:
             azi (float): Azimuth angle (degrees).
             block (bool, optional): If True (the default) the call to this method will block until the move is finished.
             rate_control (bool, optional): If True (the default) the rate of the mount will be controlled until position
-                is reached, if False the position command will be sent to the mount for excecution.
+                is reached, if False the position command will be sent to the mount for execution.
         """
         assert self.is_init, 'Must be initialised'
         assert self._alt_limit[0] is None or alt >= self._alt_limit[0], 'Altitude outside range!'
@@ -1765,7 +1765,7 @@ class Mount:
         Args:
             block (bool, optional): If True (the default) the call to this method will block until the move is finished.
             rate_control (bool, optional): If True (the default) the rate of the mount will be controlled until position
-                is reached, if False the position command will be sent to the mount for excecution.
+                is reached, if False the position command will be sent to the mount for execution.
         """
         self.move_to_alt_az(*self.home_alt_az, block=block, rate_control=rate_control)
 
@@ -2080,7 +2080,7 @@ class Receiver:
     @model.setter
     def model(self, model):
         self._logger.debug('Setting model to: '+str(model))
-        assert not self.is_init, 'Can not change already intialised device model'
+        assert not self.is_init, 'Can not change already initialised device model'
         assert isinstance(model, str), 'Model type must be a string'
         assert model.lower() in self._supported_models,\
                                                 'Model type not recognised, allowed: '+str(self._supported_models)
@@ -2100,11 +2100,11 @@ class Receiver:
     @identity.setter
     def identity(self, identity):
         self._logger.debug('Setting identity to: '+str(identity))
-        assert not self.is_init, 'Can not change already intialised device'
+        assert not self.is_init, 'Can not change already initialised device'
         assert isinstance(identity, str), 'Identity must be a string'
         assert self.model is not None, 'Must define model first'
         if self.model.lower() == 'ni_daq':
-            self._logger.debug('Using NI DAQ, checking vailidity by opening a task')
+            self._logger.debug('Using NI DAQ, checking validity by opening a task')
             import nidaqmx as ni
             t = ni.Task()
             try:
