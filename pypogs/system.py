@@ -181,8 +181,8 @@ class System:
     @staticmethod
     def update_databases():
         """Download and update Skyfield and Astropy databases (of earth rotation)."""
-        sf_api.Loader(_system_data_dir).timescale()
-        apy_util.iers.IERS_Auto.open()
+        sf_api.Loader(_system_data_dir).download('finals2000A.all')
+        apy_util.data.download_file(apy_util.iers.IERS_A_URL, cache='update')
 
     def __init__(self, data_folder=None, debug_folder=None):
         """Create System instance. See class documentation."""
