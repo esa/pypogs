@@ -8,7 +8,7 @@ and track satellites with closed-loop camera feedback. Additionally we include i
 to build a fibre-coupling Focal Plane Assembly (FPA) replacing the eyepiece in any unmodified
 portable telescope.
 
-pypogs includes a platform idenpendent Graphical User Interface (GUI) to manage alignment, tracking
+pypogs includes a platform independent Graphical User Interface (GUI) to manage alignment, tracking
 feedback, and hardware settings. The GUI controls the pypogs core through a public API (see
 documentation); pypogs may be controlled fully from the command line as well.
 
