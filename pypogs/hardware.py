@@ -331,7 +331,7 @@ class Camera:
             self._log_debug('Setting stream mode to newest only')
             self._ptgrey_camera.TLStream.StreamBufferHandlingMode.SetIntValue(
                                                                         PySpin.StreamBufferHandlingMode_NewestOnly)
-            class PtGreyEventHandler(PySpin.ImageEvent):
+            class PtGreyEventHandler(PySpin.ImageEventHandler):
                 """Barebones event handler for ptgrey, just pass along the event to the Camera class."""
                 def __init__(self, parent):
                     assert parent.model.lower() == 'ptgrey', 'Trying to attach ptgrey event handler to non ptgrey model'
@@ -371,7 +371,7 @@ class Camera:
 
             self._ptgrey_event_handler = PtGreyEventHandler(self)
             self._log_debug('Created ptgrey image event handler')
-            self._ptgrey_camera.RegisterEvent( self._ptgrey_event_handler )
+            self._ptgrey_camera.RegisterEventHandler( self._ptgrey_event_handler )
             self._log_debug('Registered ptgrey image event handler')
             self._log_info('Camera successfully initialised')
         else:
@@ -389,7 +389,7 @@ class Camera:
         if self._ptgrey_camera:
             self._log_debug('Found PtGrey camera, deinitialising')
             try:
-                self._ptgrey_camera.UnregisterEvent(self._ptgrey_event_handler)
+                self._ptgrey_camera.UnregisterEventHandler(self._ptgrey_event_handler)
                 self._log_debug('Unregistered event handler')
             except:
                 self._log_exception('Failed to unregister event handler')
