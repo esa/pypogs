@@ -155,7 +155,7 @@ class GUI:
 
     @property
     def debug_folder(self):
-        """pathlib.Path: Get or set the path for debug logging. Will create folder if not exsisting."""
+        """pathlib.Path: Get or set the path for debug logging. Will create folder if not existing."""
         return self._debug_folder
     @debug_folder.setter
     def debug_folder(self, path):
@@ -571,7 +571,7 @@ class LiveViewFrame(ttk.Frame):
             self.logger.debug('No camera selected in clear tracker callback')
 
     def clear_offset_callback(self):
-        """Clear the offset *of the preceeding tracker*."""
+        """Clear the offset *of the preceding tracker*."""
         self.logger.debug('Clicked on clear offset')
         cam = self.camera_variable.get()
         if cam == COARSE_CCL:

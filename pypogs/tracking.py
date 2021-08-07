@@ -77,7 +77,7 @@ class ControlLoopThread:
           following:
 
               - *parent*.coarse_track_thread exists and has a track
-              - aformentioned track standard deviation is below CCL_transition_th (default 100
+              - aforementioned track standard deviation is below CCL_transition_th (default 100
                 arcsec)
 
         - FCL: Fine closed-loop control. The measured position from the fine camera, returned by
@@ -87,7 +87,7 @@ class ControlLoopThread:
           following:
 
               - *parent*.fine_track_thread exists and has a track
-              - aformentioned track standard deviation is below FCL_transition_th (default 30
+              - aforementioned track standard deviation is below FCL_transition_th (default 30
                 arcsec)
 
         - CTFSP: Coarse-to-fine spiral acquisition. Only available if CTFSP_enable is set to True.
@@ -118,7 +118,7 @@ class ControlLoopThread:
     to True or False, OL mode may not be disabled.
 
     Note:
-        Integral windup protection is acheived by two means:
+        Integral windup protection is achieved by two means:
 
         1. The integral term is reset if the control signal desired is greater than the speed limit
            (disable by reset_integral_if_saturated=False).
@@ -213,7 +213,7 @@ class ControlLoopThread:
         self._FCL_Ki = 1/10  # Integral gain (1/integral time [s])
         self._FCL_speed_limit = .05  # deg/sec
         self._FCL_transition_th = 30.0  # Fine sd required to move to fine tracking (arcsec)
-        # Spiralling aquisition settings
+        # Spiralling acquisition settings
         # Coarse to Fine spiral
         self._CTFSP_enable = False
         self._CTFSP_spacing = 100.0  # Spacing between arms (arcsec)
@@ -625,7 +625,7 @@ class ControlLoopThread:
 
     @property
     def CTFSP_auto_update_CCL_goal_th(self):
-        """float: Get or set the requred FCL RMSE to auto update the CCL goal in arcseconds."""
+        """float: Get or set the required FCL RMSE to auto update the CCL goal in arcseconds."""
         return self._CTFSP_auto_update_CCL_goal_th
 
     @CTFSP_auto_update_CCL_goal_th.setter
@@ -790,7 +790,7 @@ class ControlLoopThread:
                 step = .2
                 target_itrf_xyz = self._parent. \
                     get_itrf_direction_of_target(loop_utctime + [0, step]*apy_unit.s)
-                # Convert all neccessary coordinate frames
+                # Convert all necessary coordinate frames
                 target_mnt_altaz = self._parent.alignment. \
                     get_mnt_altaz_from_itrf_xyz(target_itrf_xyz)
                 target_mnt_rate = (((target_mnt_altaz[:, 1]
@@ -1922,13 +1922,13 @@ class SpotTracker:
     reasonable maximum search radius (default 1000 arcsec).* This will also be used to initialise
     the position SD estimate. *It is recommended to set a reasonable minimum search radius
     (default None)* to at least one pixel's width. It is also possible to set maximum and minimum
-    limits on the signal sum and area SD estimates, otherwise it will be limitied to between zero
+    limits on the signal sum and area SD estimates, otherwise it will be limited to between zero
     and the mean value of the respective signal.
 
     You may define a goal position against which the output should be measured. By default this is
     (0,0) which is the centre of the image. The units for all positions will be in the units you
     provide via plate_scale (default 1 arcsec/pixel) to SpotTracker.update_from_image(). The goal
-    and properties ending in _absolute are allways measured relative to image centre.
+    and properties ending in _absolute are always measured relative to image centre.
 
     The estimators use exponentially weighted moving mean and variance.
     SpotTracker.smoothing_parameter (default 10) defines how samples are weighted and roughly
@@ -1940,7 +1940,7 @@ class SpotTracker:
     SpotTracker.failure_sd_penalty (default 25%) to account for drift in the mean.
 
     A performance metric, the root-mean-squared error (RMSE), is provided which measures the
-    position error relative to the goal (insted of the mean, as the SD does). By default this uses
+    position error relative to the goal (instead of the mean, as the SD does). By default this uses
     SpotTracker.smoothing_parameter with exponential averaging, but
     SpotTracker.rmse_smoothing_parameter may be defined to control this individually.
 
