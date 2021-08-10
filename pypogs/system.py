@@ -43,7 +43,9 @@ from tifffile import imwrite as tiff_write
 
 # Internal imports:
 from tetra3 import Tetra3
-from .hardware import Camera, Mount, Receiver
+from .hardware_cameras import Camera
+from .hardware_mounts import Mount
+from .hardware_receivers import Receiver
 from .tracking import TrackingThread, ControlLoopThread
 
 # Useful definitions:
@@ -66,7 +68,7 @@ class System:
         Tables of Earth's rotation must be downloaded to do coordinate transforms. Calling
         :meth:`update_databases()` will attempt to download these from the internet (if expired).
         To facilitate offline use of pypogs, these will otherwise not be automatically downloaded
-        unless strictly necessary. If you use pypogs offline do this update every few months to
+        unless strictly neccessary. If you use pypogs offline do this update every few months to
         keep the coordinate transforms accurate.
 
     Example:
@@ -133,7 +135,7 @@ class System:
         If your mount has built in alignment (and/or is physically aligned to the earth) you may
         call :meth:`alignment.set_alignment_enu` to set the telescope alignment to East, North, Up
         (ENU) coordinates, which will also disable the corrections done in pypogs. ENU is the
-        traditional astronomical coordinate system for altitude (elevation) and azimuth telescopes,
+        traditional astronomical coordinate system for altitide (elevation) and azimuth telescopes,
         measured as degrees above the horizon and degrees away from north (towards east)
         respectively.
 
@@ -181,8 +183,8 @@ class System:
     @staticmethod
     def update_databases():
         """Download and update Skyfield and Astropy databases (of earth rotation)."""
-        sf_api.Loader(_system_data_dir).download('finals2000A.all')
-        apy_util.data.download_file(apy_util.iers.IERS_A_URL, cache='update')
+        sf_api.Loader(_system_data_dir).timescale()
+        apy_util.iers.IERS_Auto.open()
 
     def __init__(self, data_folder=None, debug_folder=None):
         """Create System instance. See class documentation."""
@@ -686,7 +688,7 @@ class System:
         self._logger.debug('Receiver set to: ' + str(self._receiver))
 
     def add_receiver(self, *args, **kwargs):
-        """Create and set a pypogs.Receiver for the system. Arguments passed to constructor.
+        """Create and set a pypogs.Receiver for the system. Arguments passed to contructor.
 
         Args:
             model (str, optional): The model used to determine the correct hardware API. Supported:
@@ -762,7 +764,7 @@ class System:
         self.mount = None
 
     def do_auto_star_alignment(self, max_trials=1, rate_control=True):
-        """Do the auto star alignment procedure by taking eight star images across the sky.
+        """Do the auto star alginment procedure by taking eight star images across the sky.
 
         Will call System.Alignment.set_alignment_from_observations() with the captured images.
 
@@ -920,7 +922,7 @@ class System:
         Args:
             time (astropy.time.Time, optional): The time to calculate target position. If None (the
                  default) the current time is used.
-            block (bool, optional): If True (the default), execution is blocked until move
+            block (bool, optional): If True (the default), excecution is blocked until move
                 finishes.
             rate_control (bool, optional): If True (the default) rate control
                 (see pypogs.Mount) is used.
@@ -1095,7 +1097,7 @@ class Alignment:
     Alignment refers to the different coordinate frames in use to get the telescope to point in the
     correct direction. A direction in some coordinate frame can either be represented as a
     cartesian unit vector or as two angles: altitude and azimuth. In the former case they are
-    appended by _xyz and in the latter by _altaz. There are four coordinate frames to consider,
+    appended by _xyz and in the latter by _altaz. There are four coodinate frames to consider,
     ITRF, ENU, MNT, and COM, see below for descriptions.
 
     The fundamental coordinates used are ITRF_xyz unit vectors. They give direction in an earth
@@ -1187,7 +1189,7 @@ class Alignment:
         self._telescope_ITRF = None  # Tel. location ITRF (xyz) in metres
         self._location = None  # Telescope location astropy EarthLocation
         # Transformation matrices
-        self._MX_itrf2enu = None  # Matrix transforming vectors in ITRF-xyz to ENU-xyz
+        self._MX_itrf2enu = None  # Matrix tranforming vectors in ITRF-xyz to ENU-xyz
         self._MX_enu2itrf = None  # Inverse of above
         self._MX_itrf2mnt = None  # Matrix transforming vectors in ITRF-xyz to MNT-xyz
         self._MX_mnt2itrf = None  # Inverse of above
@@ -1750,7 +1752,7 @@ class Target:
     You may also give a start and end time (e.g. useful for satellite rise and set times) when
     creating the target or by the method Target.set_start_end_time().
 
-    With a target set, get the ITRF_xyz coordinates at your preferred times with
+    With a target set, get the ITRF_xyz coordinates at your prefered times with
     Target.get_target_itrf_xyz().
 
     Note:
