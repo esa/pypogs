@@ -4,6 +4,7 @@
 Current harware support:
     - :class:`pypogs.Mount`: 'celestron' for Celestron, Orion and SkyWatcher telescopes (using NexStar serial protocol). No additional
       packages required. Tested with Celestron model CPC800.
+    - :class:`pypogs.Mount`: 'ascom' for ASCOM-enabled mounts. Requires ASCOM platform and mount driver.
 
 This is Free and Open-Source Software originally written by Gustav Pettersson at ESA.
 
@@ -47,11 +48,15 @@ class Mount:
     maximum angles and rates) may be set.
 
     Args:
-        model (str, optional): The model used to determine the the hardware control interface. Supported: 'celestron'
-            for Celestron NexStar and Orion/SkyWatcher SynScan (all the same) hand controller communication over serial.
+        model (str, optional): The model used to determine the the hardware control interface. 
+            Supported: 
+               'celestron' for Celestron NexStar and Orion/SkyWatcher SynScan (all the same) hand controller communication over serial.
+               'ascom'     for ASCOM-enabled telescope mounts.
         identity (str or int, optional): String or int identifying the device. For model *celestron* this can either be
             a string with the serial port (e.g. 'COM3' on Windows or '/dev/ttyUSB0' on Linux) or an int with the index
             in the list of available ports to use (e.g. identity=0 i if only one serial device is connected.)
+            For model *ascom* this can either be left blank to invoke the ASCOM telescope selection menu, or may specify 
+            a specific installed ASCOM driver by (case sensitive) name (e.g. DeviceHub, Celestron, Simulator, SkyWatcher, etc).
         name (str, optional): Name for the device.
         auto_init (bool, optional): If both model and identity are given when creating the Mount and auto_init
             is True (the default), Mount.initialize() will be called after creation.
@@ -81,7 +86,7 @@ class Mount:
         backlash compensation. In our testing the accuracy difference is negligible so the default is recommended.
     """
 
-    _supported_models = ('celestron',)
+    _supported_models = ('celestron','ascom',)
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
         """Create Mount instance. See class documentation."""
@@ -122,6 +127,9 @@ class Mount:
         self._alt_zero = 0 #Amount to subtract from alt.
         # Only used for model celestron
         self._cel_serial_port = None
+        # Only used for model ascom
+        self._ascom_scope_alt_axis = 1
+        self._ascom_scope_azi_axis = 0
         # Thread for rate control
         self._control_thread = None
         self._control_thread_stop = True
@@ -204,7 +212,7 @@ class Mount:
 
         Supported:
             - 'celestron' for Celestron NexStar and Orion/SkyWatcher SynScan hand controllers over serial.
-
+            - 'ascom'     for ASCOM-enabled telescope mounts.
         - This will determine which hardware interface is used.
         - Must set before initialising the device and may not be changed for an initialised device.
         """
@@ -226,6 +234,8 @@ class Mount:
         - For model *celestron* this can either be a string with the serial port (e.g. 'COM3' on Windows or
           '/dev/ttyUSB0' on Linux) or an int with the index in the list of available ports to use (e.g. identity=0 i if
           only one serial device is connected.)
+        - For model *ascom* this can either be left blank to invoke the ASCOM telescope selection menu, or may specify 
+          a specific installed ASCOM driver by name (case sensitive) (e.g. DeviceHub, Celestron, Simulator, SkyWatcher, etc).
         - Must set before initialising the device and may not be changed for an initialised device.
 
         Raises:
@@ -261,6 +271,26 @@ class Mount:
                 self._logger.debug('Failed to open port', exc_info=True)
                 raise AssertionError('Failed to open the serial port named: '+str(identity))
             self._identity = identity
+        elif self.model.lower() == 'ascom':
+            if not hasattr(self, '_ascom_driver_handler'):
+                import win32com.client
+                self._ascom_driver_handler = win32com.client
+            ascomDriverName = str()
+            if self.identity is not None:
+                self._logger.debug('Specified identity: "'+str(self.identity)+'" ['+str(len(self.identity))+']')
+                if self.identity.startswith('ASCOM'):
+                    ascomDriverName = self.identity
+                else:
+                    ascomDriverName = 'ASCOM.'+str(self.identity)+'.telescope'
+            else:
+                ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
+                ascomSelector.DeviceType = 'Telescope'
+                ascomDriverName = ascomSelector.Choose('None')
+                self._logger.debug("Selected telescope driver: "+ascomDriverName)
+                if not ascomDriverName:            
+                    self._logger.debug('User canceled telescope selection')
+            assert ascomDriverName, 'Unable to identify ASCOM telescope.'
+            self._identity = ascomDriverName
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -272,6 +302,8 @@ class Mount:
         if not self.model: return False
         if self.model == 'celestron':
             return self._is_init
+        elif self.model.lower() == 'ascom':
+            return self._is_init
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -281,6 +313,8 @@ class Mount:
         """tuple of str: Get all the available properties (settings) supported by this device."""
         assert self.is_init, 'Mount must be initialised'
         if self.model.lower() == 'celestron':
+            return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
+        elif self.model.lower() == 'ascom':
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
         else:
             self._log_warning('Forbidden model string defined.')
@@ -391,6 +425,20 @@ class Mount:
             self._logger.debug('Ensure sidreal tracking is off.')
             self._cel_tracking_off()
             self._is_init = True
+        elif self.model.lower() == "ascom":
+            ascomDriverName = self.identity;
+            self._logger.debug('Attempting to connect to ASCOM device "'+ascomDriverName+'"')
+            self._logger.debug('Loading ASCOM telescope driver: '+ascomDriverName)
+            self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
+            assert hasattr(self._ascom_telescope, 'Connected'), "Unable to access telescope driver"
+            self._logger.debug('Connecting to telescope')
+            assert self._ascom_telescope is not None, 'Faile to intialize ASCOM telescope'
+            self._ascom_telescope.Connected = True
+            assert self._ascom_telescope.Connected, "Failed to connect to telescope"
+            self._logger.debug('Connected to ASCOM telescope')
+            if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
+                self._ascom_telescope.Tracking = False
+            self._is_init = True
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -413,6 +461,13 @@ class Mount:
             self._logger.debug('Using celestron, closing and deleting serial port')
             self._cel_serial_port.close()
             self._cel_serial_port = None
+            self._is_init = False
+            self._logger.info('Mount deinitialised')
+        elif self.model.lower() == "ascom":
+            self._logger.debug('Disconnecting ASCOM telescope mount')
+            self._ascom_telescope.AbortSlew()
+            self._ascom_telescope.Connected = False
+            self._ascom_telescope = None
             self._is_init = False
             self._logger.info('Mount deinitialised')
         else:
@@ -439,6 +494,8 @@ class Mount:
             moving = not ret[0] == b'0'
             self._logger.debug('Mount returned: ' + str(ret[0]) + ', is moving: ' + str(moving))
             return moving
+        elif self.model.lower() == "ascom":
+            return self._ascom_telescope.Slewing or self._ascom_telescope.Tracking
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -462,66 +519,94 @@ class Mount:
                            + ' rate_control=' + str(rate_control))
         self._logger.debug('Stopping mount first')
         self.stop()
-        if self.model == 'celestron':
+        if self.model == 'celestron' or self.model.lower() == "ascom":
             self._logger.debug('Using celestron, ensure range -180 to 180')
-#            alt = self.degrees_to_n180_180(alt - self._alt_zero)
+            alt = self.degrees_to_n180_180(alt - self._alt_zero)
             alt = self.degrees_to_n180_180(alt)
             azi = self.degrees_to_n180_180(azi)
-            self._logger.debug('Will command: alt=' + str(alt) + ' azi=' + str(azi))
-            if rate_control: #Use own control thread
-                self._logger.debug('Starting rate controller')
-                Kp = 1.5
-                self._control_thread_stop = False
-                success = [False]
-                def _loop_slew_to(alt, azi, success):
-                    while not self._control_thread_stop:
-                        curr_pos = self.get_alt_az()
-                        eAlt = Kp * self.degrees_to_n180_180(alt - curr_pos[0])
-                        eAzi = Kp * self.degrees_to_n180_180(azi - curr_pos[1])
-                        if eAlt < -self._max_speed[0]: eAlt = -self._max_speed[0]
-                        if eAlt > self._max_speed[0]: eAlt = self._max_speed[0]
-                        if eAzi < -self._max_speed[1]: eAzi = -self._max_speed[1]
-                        if eAzi > self._max_speed[1]: eAzi = self._max_speed[1]
+            
+        self._logger.debug('Will command: alt=' + str(alt) + ' azi=' + str(azi))
+        if rate_control: #Use own control thread
+            self._logger.debug('Starting rate controller')
+            Kp = 1.5
+            self._control_thread_stop = False
+            success = [False]
+            def _loop_slew_to(alt, azi, success):
+                while not self._control_thread_stop:
+                    curr_pos = self.get_alt_az()
+                    eAlt = Kp * self.degrees_to_n180_180(alt - curr_pos[0])
+                    eAzi = Kp * self.degrees_to_n180_180(azi - curr_pos[1])
+                    if eAlt < -self._max_speed[0]: eAlt = -self._max_speed[0]
+                    if eAlt > self._max_speed[0]: eAlt = self._max_speed[0]
+                    if eAzi < -self._max_speed[1]: eAzi = -self._max_speed[1]
+                    if eAzi > self._max_speed[1]: eAzi = self._max_speed[1]
 
-                        if abs(eAlt)<.001 and abs(eAzi)<.001:
-                            self.set_rate_alt_az(0, 0)
-                            success[0] = True
-                            break
-                        else:
-                            self.set_rate_alt_az(eAlt, eAzi)
-                    self._control_thread_stop = True
-                self._control_thread = Thread(target=_loop_slew_to, args=(alt, azi, success))
-                self._control_thread.start()
-                if block:
-                    self._logger.debug('Waiting for thread to finish')
-                    self._control_thread.join()
-                    assert success[0], 'Failed moving with rate controller'
+                    if abs(eAlt)<.001 and abs(eAzi)<.001:
+                        self.set_rate_alt_az(0, 0)
+                        success[0] = True
+                        break
+                    else:
+                        self.set_rate_alt_az(eAlt, eAzi)
+                self._control_thread_stop = True
+            self._control_thread = Thread(target=_loop_slew_to, args=(alt, azi, success))
+            self._control_thread.start()
+            if block:
+                self._logger.debug('Waiting for thread to finish')
+                self._control_thread.join()
+                assert success[0], 'Failed moving with rate controller'
+        else:
+            self._logger.debug('Sending move command to mount')
+            success = [False]
+            def _move_to_alt_az(alt, azi, success):
+                success[0] = command_to_alt_az(alt, azi)
+            t = Thread(target=_move_to_alt_az, args=(alt, azi, success))
+            t.start()
+            t.join()
+            assert success[0], 'Failed communicating with mount'
+            self._logger.debug('Send successful')
+            if block:
+                self._logger.debug('Waiting for mount to finish')
+                self.wait_for_move_to()
+
+    def command_to_alt_az(self, alt, azi):
+        """Command the mount to slew to alt/az coordinates. Must be initialised.
+
+        Args:
+            alt (float): Altitude (degrees).
+            azi (float): Azimuth (degrees).
+        """
+        assert self.is_init, 'Must be initialised'
+        if self.model == 'celestron':
+            #azi = azi %360 #Mount uses 0-360
+            # TODO check alt zero correct
+            altRaw = int(self.degrees_to_0_360(alt - self._alt_zero) / 360 * 2**32) & 0xFFFFFF00
+            aziRaw = int(self.degrees_to_0_360(azi) / 360 * 2**32) & 0xFFFFFF00
+            altFormatted = '{0:0{1}X}'.format(altRaw,8)
+            aziFormatted = '{0:0{1}X}'.format(aziRaw,8)
+            command = 'b' + aziFormatted + ',' + altFormatted
+            self._cel_send_text_command(command)
+            if self._cel_check_ack():
+                self._logger.debug('Mount acknowledged')
+                return True
             else:
-                self._logger.debug('Sending move command to mount')
-                success = [False]
-                def _move_to_alt_az(alt, azi, success):
-                    #azi = azi %360 #Mount uses 0-360
-                    # TODO check alt zero correct
-                    altRaw = int(self.degrees_to_0_360(alt - self._alt_zero) / 360 * 2**32) & 0xFFFFFF00
-                    aziRaw = int(self.degrees_to_0_360(azi) / 360 * 2**32) & 0xFFFFFF00
-                    altFormatted = '{0:0{1}X}'.format(altRaw,8)
-                    aziFormatted = '{0:0{1}X}'.format(aziRaw,8)
-                    command = 'b' + aziFormatted + ',' + altFormatted
-                    self._cel_send_text_command(command)
-                    assert self._cel_check_ack(), 'Mount did not acknowledge'
-                    success[0] = True
-                t = Thread(target=_move_to_alt_az, args=(alt, azi, success))
-                t.start()
-                t.join()
-                assert success[0], 'Failed communicating with mount'
-                self._logger.debug('Send successful')
-                if block:
-                    self._logger.debug('Waiting for mount to finish')
-                    self.wait_for_move_to()
+                self._logger.debug('Mount acknowledged')
+                return False
+        elif self.model.lower() == "ascom":
+            if not self._ascom_telescope.CanSlewAltAz:
+                raise RuntimeError('ASCOM mount does not support alt/az go-to commanding')
+                return False
+            if self._ascom_telescope.AtPark:
+                raise RuntimeError('ASCOM mount is parked; cannot command alt/az slew')
+                return False
+            if self._ascom_telescope.Tracking:
+                raise RuntimeError('ASCOM mount is tracking; cannot command alt/az slew')
+                return False                
+            self._ascom_telescope.SlewToAltAz(alt, azi)
+            return True
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
-
+            
     def get_alt_az(self):
         """Get the current alt and azi angles of the mount.
 
@@ -550,6 +635,14 @@ class Mount:
             self._state_cache['alt'] = alt
             self._state_cache['azi'] = azi
             return (alt, azi)
+        elif self.model.lower() == "ascom":
+            self._logger.debug('Using ASCOM, requesting mount position')
+            alt = self._ascom_telescope.Altitude
+            azi = self._ascom_telescope.Azimuth
+            self._logger.debug('Mount returned: alt=' + str(alt) + ' azi=' + str(azi))
+            self._state_cache['alt'] = alt
+            self._state_cache['azi'] = azi
+            return (alt, azi)            
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -609,6 +702,15 @@ class Mount:
             self._logger.debug('Send successful')
             self._state_cache['alt_rate'] = alt
             self._state_cache['azi_rate'] = azi
+        elif self.model.lower() == "ascom":
+            success = [False]
+            try:
+                self._ascom_telescope.MoveAxis(self._ascom_scope_alt_axis, alt)
+                self._ascom_telescope.MoveAxis(self._ascom_scope_azi_axis, azi)
+                success[0] = True
+            except:
+                self._logger.warning('Alt/az rate commanding failed.')
+                success[0] = False
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
