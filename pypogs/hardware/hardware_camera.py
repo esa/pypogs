@@ -1,8 +1,8 @@
 """Camera hardware interface
-======================
+============================
 
 Current hardware support:
-    - :class:`pypogs.Camera`: 'ptgrey' for FLIR (formerly Point Grey) machine vision cameras. Requires Spinnaker API and PySpin, see the
+    - 'ptgrey' for FLIR (formerly Point Grey) machine vision cameras. Requires Spinnaker API and PySpin, see the
       installation instructions. Tested with Blackfly S USB3 model BFS-U3-31S4M.
 
 This is Free and Open-Source Software originally written by Gustav Pettersson at ESA.

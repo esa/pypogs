@@ -1,9 +1,8 @@
 """Receiver hardware interfaces
-======================
+===============================
 
 Current hardware support:
-
-    - :class:`pypogs.Receiver`: 'ni_daq' for National Instruments DAQ data acquisition cards. Requires NI-DAQmx API and nidaqmx, see the
+    - 'ni_daq' for National Instruments DAQ data acquisition cards. Requires NI-DAQmx API and nidaqmx, see the
       installation instructions. Tested with NI DAQ model USB-6211.
 
 This is Free and Open-Source Software originally written by Gustav Pettersson at ESA.

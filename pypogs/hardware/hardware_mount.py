@@ -1,8 +1,8 @@
 """Mount hardware interfaces
-======================
+============================
 
 Current hardware support:
-    - :class:`pypogs.Mount`: 'celestron' for Celestron, Orion and SkyWatcher telescopes (using NexStar serial protocol). No additional
+    - 'celestron' for Celestron, Orion and SkyWatcher telescopes (using NexStar serial protocol). No additional
       packages required. Tested with Celestron model CPC800.
 
 This is Free and Open-Source Software originally written by Gustav Pettersson at ESA.
