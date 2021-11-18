@@ -29,6 +29,7 @@ from astropy.coordinates import SkyCoord
 from skyfield.sgp4lib import EarthSatellite
 from ast import literal_eval as parse_expression
 from PIL import Image, ImageTk
+from satellite_tle import fetch_tle_from_celestrak
 import numpy as np
 from pathlib import Path
 import logging
@@ -1409,8 +1410,17 @@ class TargetFrame(ttk.Frame):
             self.title('Target')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
+
+            get_tle_frame = ttk.Frame(self)
+            get_tle_frame.grid(row=0, column=0, padx=(0,10), pady=10)
+            ttk.Label(get_tle_frame, text='Get TLE from satellite ID:').grid(row=0, column=0, columnspan=2)
+            ttk.Label(get_tle_frame, text='NORAD ID:').grid(row=1, column=0, sticky=tk.E)
+            self.sat_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
+            self.sat_id_entry.grid(row=1, column=1)
+            ttk.Button(get_tle_frame, text='Get', command=self.get_tle_callback).grid(row=1, column=2, sticky=tk.W+tk.E)
+
             tle_frame = ttk.Frame(self)
-            tle_frame.grid(row=0, column=0, columnspan=2, padx=(0,10), pady=10)
+            tle_frame.grid(row=1, column=0, columnspan=2, padx=(0,10), pady=10)
             ttk.Label(tle_frame, text='Set target from TLE:').grid(row=0, column=0)
             self.tle_line1_entry = ttk.Entry(tle_frame, width=69, font='TkFixedFont')
             self.tle_line1_entry.grid(row=1, column=0)
@@ -1419,7 +1429,7 @@ class TargetFrame(ttk.Frame):
             ttk.Button(tle_frame, text='Set', command=self.tle_callback).grid(row=3, column=0, sticky=tk.W+tk.E)
 
             radec_frame = ttk.Frame(self)
-            radec_frame.grid(row=1, column=0, padx=(10,0), pady=10)
+            radec_frame.grid(row=2, column=0, padx=(10,0), pady=10)
             ttk.Label(radec_frame, text='Set target from RA/Dec:').grid(row=0, column=0, columnspan=2)
             ttk.Label(radec_frame, text='RA: (deg)').grid(row=1, column=0, sticky=tk.E)
             self.ra_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
@@ -1431,7 +1441,7 @@ class TargetFrame(ttk.Frame):
                                                 .grid(row=3, column=1, sticky=tk.W+tk.E)
 
             time_frame = ttk.Frame(self)
-            time_frame.grid(row=1, column=1, padx=(10,0), pady=10)
+            time_frame.grid(row=2, column=1, padx=(10,0), pady=10)
             ttk.Label(time_frame, text='Set tracking time (optional):').grid(row=0, column=0, columnspan=3)
             ttk.Label(time_frame, text='Start: (UTC)').grid(row=1, column=0, sticky=tk.E)
             self.start_entry = ttk.Entry(time_frame, width=25, font='TkFixedFont')
@@ -1478,6 +1488,28 @@ class TargetFrame(ttk.Frame):
             self.end_entry.insert(0, str(t_end) if t_end is not None else '')
             self.master.update()
 
+        def get_tle_callback(self):
+            self.logger.debug("TLE requested for sat ID: " + self.sat_id_entry.get())        
+            try:
+                sat_id = int(self.sat_id_entry.get())
+            except:
+                self.logger.debug("sat ID invalid")
+                sat_id = None
+            if sat_id:
+                try:
+                    tle = fetch_tle_from_celestrak(sat_id)
+                except:
+                    self.logger.debug('unable to fetch TLE for sat ID "',sat_id,'"')
+                    tle = None
+                if len(tle)==3:
+                    sat_name = tle[0]
+                    self.logger.debug(tle[1])
+                    self.tle_line1_entry.insert(0,tle[1])
+                    self.tle_line2_entry.insert(0,tle[2])                
+                    self.logger.debug('successfully fetched TLE for sat ID '+str(sat_id)+', "'+sat_name+'"')
+                else:
+                    self.logger.debug('unable to fetch TLE for sat ID "'+str(sat_id)+'"')
+                    
         def tle_callback(self):
             try:
                 line1 = self.tle_line1_entry.get()

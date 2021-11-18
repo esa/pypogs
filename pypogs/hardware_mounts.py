@@ -272,7 +272,9 @@ class Mount:
                 raise AssertionError('Failed to open the serial port named: '+str(identity))
             self._identity = identity
         elif self.model.lower() == 'ascom':
+            self._logger.debug('Attempting to connect to ASCOM device "'+str(self.identity)+'"')
             if not hasattr(self, '_ascom_driver_handler'):
+                self._logger.debug('Loading ASCOM win32com device handler')
                 import win32com.client
                 self._ascom_driver_handler = win32com.client
             ascomDriverName = str()
@@ -289,7 +291,13 @@ class Mount:
                 self._logger.debug("Selected telescope driver: "+ascomDriverName)
                 if not ascomDriverName:            
                     self._logger.debug('User canceled telescope selection')
-            assert ascomDriverName, 'Unable to identify ASCOM telescope.'
+            if not ascomDriverName:
+                raise AssertionError('Failed to identify ASCOM telescope')
+            try:
+                self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
+                self._ascom_telescope = None
+            except:
+                raise AssertionError('Failed to connect to ASCOM telescope: '+str(ascomDriverName))
             self._identity = ascomDriverName
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -311,8 +319,9 @@ class Mount:
     @property
     def available_properties(self):
         """tuple of str: Get all the available properties (settings) supported by this device."""
-        assert self.is_init, 'Mount must be initialised'
-        if self.model.lower() == 'celestron':
+        if not self.is_init:
+            return None
+        elif self.model.lower() == 'celestron':
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
         elif self.model.lower() == 'ascom':
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
@@ -407,8 +416,10 @@ class Mount:
         """Initialise (make ready to start) the device. The model and identity must be defined."""
         self._logger.debug('Initialising')
         assert not self.is_init, 'Already initialised'
-        assert not None in (self.model, self.identity), 'Must define model and identity before initialising'
+        #assert not None in (self.model, self.identity), 'Must define model and identity before initialising'
+        assert not None in (self.model, ), 'Must define model before initialising'
         if self.model == 'celestron':
+            assert not None in (self.identity), 'Must define identity before initialising'
             self._logger.debug('Using Celestron, try to initialise')
             try:
                 self._cel_serial_port = serial.Serial(self.identity, 9600, parity=serial.PARITY_NONE,\
@@ -426,27 +437,54 @@ class Mount:
             self._cel_tracking_off()
             self._is_init = True
         elif self.model.lower() == "ascom":
-            ascomDriverName = self.identity;
-            self._logger.debug('Attempting to connect to ASCOM device "'+ascomDriverName+'"')
+            if self._ascom_telescope is not None:
+                raise RuntimeError('There is already an ASCOM telescope object here')
+            self._logger.debug('Attempting to connect to ASCOM device "'+str(self.identity)+'"')
+            if not hasattr(self, '_ascom_driver_handler'):
+                import win32com.client
+                self._ascom_driver_handler = win32com.client 
+            if self.identity is not None:
+                self._logger.debug('Specified identity: "'+str(self.identity)+'" ['+str(len(self.identity))+']')
+                if self.identity.startswith('ASCOM'):
+                    ascomDriverName = self.identity
+                else:
+                    ascomDriverName = 'ASCOM.'+str(self.identity)+'.telescope'
+            else:
+                ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
+                ascomSelector.DeviceType = 'Telescope'
+                ascomDriverName = ascomSelector.Choose('None')
+                self._logger.debug("Selected telescope driver: "+ascomDriverName)
+                if not ascomDriverName:            
+                    self._logger.debug('User canceled telescope selection')
+            assert ascomDriverName, 'Unable to identify ASCOM telescope.'
             self._logger.debug('Loading ASCOM telescope driver: '+ascomDriverName)
             self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
+            assert self._ascom_telescope is not None, 'Failed to intialize ASCOM telescope'
             assert hasattr(self._ascom_telescope, 'Connected'), "Unable to access telescope driver"
             self._logger.debug('Connecting to telescope')
-            assert self._ascom_telescope is not None, 'Faile to intialize ASCOM telescope'
             self._ascom_telescope.Connected = True
             assert self._ascom_telescope.Connected, "Failed to connect to telescope"
             self._logger.debug('Connected to ASCOM telescope')
             if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
-                self._ascom_telescope.Tracking = False
+                self._ascom_telescope.Tracking = False  #turn off tracking
+            try:
+                self._ascom_canSlewAltAz = self._ascom_telescop.CanSlewAltAz
+            except:
+                self._ascom_canSlewAltAz = False
             self._is_init = True
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
-        self._logger.info('Mount initialised.')
-        try:
-            self.get_alt_az() #Get cache to update
-        except AssertionError:
-            self._logger.debug('Failed to set state cache', exc_info=True)
+        
+        if self._is_init:
+            self._logger.info('Mount initialised.')
+            try:
+                self.get_alt_az() #Get cache to update
+            except AssertionError:
+                self._logger.debug('Failed to set state cache', exc_info=True)
+        else:
+            self._logger.info('Mount not initialised.')
+        
 
     def deinitialize(self):
         """De-initialise the device and release hardware (serial port). Will stop the mount if it is moving."""
