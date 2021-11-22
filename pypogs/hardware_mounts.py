@@ -125,6 +125,7 @@ class Mount:
         self._azi_limit = (None, None) #limit degees
         self._home_pos = (0, 0) #Home position
         self._alt_zero = 0 #Amount to subtract from alt.
+        self._axis_directions = (1, 1) #set to 1 to use mount default axis direction, -1 to invert direction
         # Only used for model celestron
         self._cel_serial_port = None
         # Only used for model ascom
@@ -132,7 +133,7 @@ class Mount:
         self._ascom_scope_alt_axis = 1
         self._ascom_scope_azi_axis = 0
         self._ascom_availableRatesAlt = [0]
-        self._ascom_availableRatesAzi = [0]        
+        self._ascom_availableRatesAzi = [0]
         # Thread for rate control
         self._control_thread = None
         self._control_thread_stop = True
@@ -328,7 +329,7 @@ class Mount:
         elif self.model.lower() == 'celestron':
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
         elif self.model.lower() == 'ascom':
-            return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
+            return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit', 'axis_directions')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -416,6 +417,25 @@ class Mount:
                            , float(azilim[1]) if azilim[1] is not None else None)
         self._logger.debug('Set azi limit to: '+str(self._azi_limit))
 
+    @property
+    def axis_directions(self):
+        """tuple of float: Get or set the azimuth limits (degrees) where the mount can safely move.
+            May be set to None. Default (None, None). Not enforced when slewing (set_rate) the mount.
+        """
+        return self._axis_directions
+    @axis_directions.setter
+    def axis_directions(self, axis_dirs):
+        if axis_dirs is None:
+            self._logger.debug('Setting axis directions to 1')
+            self._axis_directions = (1, 1)
+        assert isinstance(axis_dirs, (tuple, list)) and len(axis_dirs)==2, 'Must be 2-tuple'
+        assert axis_dirs[0] in [-1, 1] and axis_dirs[1] in [-1, 1], 'Axis directions must be 1 or -1'
+        self._logger.debug('Got set axis directions with: '+str(axis_dirs))
+        self._axis_directions = (int(axis_dirs[0]) if axis_dirs[0] is not None else None \
+                               , int(axis_dirs[1]) if axis_dirs[1] is not None else None)
+        self._logger.debug('Set axis directions to: '+str(self._axis_directions))
+        
+        
     def initialize(self):
         """Initialise (make ready to start) the device. The model and identity must be defined."""
         self._logger.debug('Initialising')
@@ -476,6 +496,11 @@ class Mount:
                 self._ascom_canSlewAltAz = self._ascom_telescope.CanSlewAltAz
             except:
                 self._ascom_canSlewAltAz = False
+                
+            for axis in [0, 1]:
+                self._logger.debug('axis ' + str(axis) + ' rate count: ' + str(self._ascom_telescope.AxisRates(axis).Count))
+                for i in range(1, self._ascom_telescope.AxisRates(axis).Count+1):
+                    self._logger.debug('axis rate ' + str(i) + ' min: ' + str(self._ascom_telescope.AxisRates(axis).Item(i).Minimum) + ', max: ' + str(self._ascom_telescope.AxisRates(axis).Item(i).Maximum))
             for i in range(1, self._ascom_telescope.AxisRates(self._ascom_scope_alt_axis).Count+1):
                 self._ascom_availableRatesAlt.append(float(self._ascom_telescope.AxisRates(self._ascom_scope_alt_axis).Item(i).Maximum))
             for i in range(1, self._ascom_telescope.AxisRates(self._ascom_scope_azi_axis).Count+1):
@@ -750,25 +775,32 @@ class Mount:
             self._state_cache['azi_rate'] = azi
         elif self.model.lower() == "ascom":
             if alt == 0:  alt_rate = 0
-            else:
-                for alt_rate in self._ascom_availableRatesAlt:
-                    if alt_rate > abs(alt):
+            requested_rates = [0, 0]
+            requested_rates[self._ascom_scope_alt_axis] = alt
+            requested_rates[self._ascom_scope_azi_axis] = azi
+            rates = [0, 0]
+            for axis in [0, 1]:
+                requested_rate_mag = abs(requested_rates[axis])
+                requested_rate_sign = 1 if requested_rates[axis]>=0 else -1
+                self._logger.debug('axis ' + str(axis) + ' requested rate mag: ' + str(requested_rate_mag) + ', sign: ' + str(requested_rate_sign))
+                for i in range(1, self._ascom_telescope.AxisRates(axis).Count+1):                    
+                    if requested_rate_mag >= self._ascom_telescope.AxisRates(axis).Item(i).Minimum and \
+                       requested_rate_mag <= self._ascom_telescope.AxisRates(axis).Item(i).Maximum:
+                        rates[axis] = requested_rate_mag * requested_rate_sign
                         break
-                alt_rate *= (1 if alt>0 else -1)
-            if azi == 0:  azi_rate = 0
-            else:
-                for azi_rate in self._ascom_availableRatesAzi:
-                    if azi_rate > abs(azi):
-                        break
-                azi_rate *= (1 if azi>0 else -1)
-            self._logger.debug('Commanding rates: alt '+str(alt_rate)+', azi '+str(azi_rate)+'   ('+str(alt)+', '+str(azi)+')')
+                    elif requested_rates[axis] >= self._ascom_telescope.AxisRates(axis).Item(i).Maximum:
+                        rates[axis] = self._ascom_telescope.AxisRates(axis).Item(i).Maximum * requested_rate_sign
+                rates[axis] *= self._axis_directions[axis]
+            self._logger.debug('Commanding rates: alt '+str(rates[self._ascom_scope_alt_axis])+', azi '+str(rates[self._ascom_scope_azi_axis]))
             success = [False]
             try:
-                self._ascom_telescope.MoveAxis(self._ascom_scope_alt_axis, alt_rate)
-                self._ascom_telescope.MoveAxis(self._ascom_scope_azi_axis, azi_rate)
+                self._ascom_telescope.MoveAxis(self._ascom_scope_alt_axis, rates[self._ascom_scope_alt_axis])
+                self._ascom_telescope.MoveAxis(self._ascom_scope_azi_axis, rates[self._ascom_scope_azi_axis])
+                self._state_cache['alt_rate'] = rates[self._ascom_scope_alt_axis]
+                self._state_cache['azi_rate'] = rates[self._ascom_scope_azi_axis]
                 success[0] = True
             except:
-                self._logger.warning('Alt/az rate commanding failed. ['+str(alt)+','+str(azi)+']')
+                self._logger.warning('Alt/az rate commanding failed. ['+str(rates[self._ascom_scope_alt_axis])+','+str(rates[self._ascom_scope_azi_axis])+']')
                 success[0] = False
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -776,17 +808,17 @@ class Mount:
 
     def stop(self):
         """Stop moving."""
-        assert self.is_init, 'Must be initialised'
         self._logger.debug('Got stop command, check thread')
         if self._control_thread is not None and self._control_thread.is_alive():
             self._logger.debug('Stopping control thread')
             self._control_thread_stop = True
             self._control_thread.join()
             self._logger.debug('Stopped')
-        self._logger.debug('Sending zero rate command')
-        self.set_rate_alt_az(0, 0)
-        if self.model.lower() == "ascom":
-            self._ascom_telescope.AbortSlew()        
+        if self.is_init:
+            self._logger.debug('Sending zero rate command')
+            self.set_rate_alt_az(0, 0)
+            if self.model.lower() == "ascom":
+                self._ascom_telescope.AbortSlew()        
         self._logger.debug('Stopped mount')
 
     def wait_for_move_to(self, timeout=120):
