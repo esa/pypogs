@@ -1237,12 +1237,12 @@ class HardwareFrame(ttk.Frame):
                 identity = self.device.identity
                 if identity is None: identity = ''
                 name = self.device.name
+                self.update_properties()
             self.model_entry.insert(0, model)
             self.identity_entry.insert(0, identity)
             self.name_entry.insert(0, name)
             self.linked_bool.set(self.device is not None and self.device is self.link_device)
-            self.master.update()
-            self.update_properties()
+            self.master.update()            
 
         def clear_callback(self):
             self.logger.debug('HardwarePopup clear button clicked')

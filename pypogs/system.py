@@ -724,11 +724,12 @@ class System:
         self._logger.debug('Got set mount with: ' + str(mount))
         if self.mount is not None:
             self._logger.debug('Already have a mount, try to clear it')
-            try:
-                self.mount.deinitialize()
-                self._logger.debug('Deinit')
-            except BaseException:
-                self._logger.debug('Failed to deinit', exc_info=True)
+            if self.mount._is_init:
+                try:
+                    self.mount.deinitialize()
+                    self._logger.debug('Deinit')
+                except BaseException:
+                    self._logger.debug('Failed to deinit', exc_info=True)
             self._mount = None
             self._logger.debug('Cleared')
         if mount is not None:
