@@ -33,6 +33,7 @@ from satellite_tle import fetch_tle_from_celestrak
 import numpy as np
 from pathlib import Path
 import logging
+import sys, os, traceback
 
 COMMAND = 0
 MOUNT = 1
@@ -362,9 +363,9 @@ class TrackingControlFrame(ttk.Frame):
                                                                                             .grid(sticky=tk.W)
         ttk.Checkbutton(auto_frame, text='Fine', variable=self.auto_fine, command=self.fine_callback) \
                                                                                             .grid(sticky=tk.W)
-        ttk.Button(self, text='Start Tracking', command=self.start_callback, width=12) \
+        ttk.Button(self, text='Start Tracking', command=self.start_tracking_callback, width=12) \
                                                                 .pack(fill=tk.BOTH, expand=True)
-        ttk.Button(self, text='Stop Tracking', command=self.stop_callback, width=12) \
+        ttk.Button(self, text='Stop Tracking', command=self.stop_tracking_callback, width=12) \
                                                                 .pack(fill=tk.BOTH, expand=True)
         self.update()
 
@@ -419,13 +420,14 @@ class TrackingControlFrame(ttk.Frame):
             ErrorPopup(self, err, self.logger)
 #        self.update()
 
-    def start_callback(self):
+    def start_tracking_callback(self):
         try:
             self.sys.start_tracking()
         except Exception as err:
             self.logger.debug('Did not start tracking', exc_info=True)
             ErrorPopup(self, err, self.logger)
-    def stop_callback(self):
+    def stop_tracking_callback(self):
+        self.logger.debug('TrackingControlFrame got stop request')
         try:
             self.sys.stop()
         except Exception as err:
@@ -1847,6 +1849,7 @@ class ErrorPopup(tk.Toplevel):
     """Extends tkinter.Toplevel for error popups"""
     def __init__(self, master, error, logger):
         logger.debug('ErrorPopup: Got error: ' + str(error))
+        print(traceback.format_exc())
         super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
         self.title('Error')
         self.grab_set() #Grab control

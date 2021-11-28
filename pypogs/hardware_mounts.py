@@ -374,13 +374,13 @@ class Mount:
     @max_rate.setter
     def max_rate(self, maxrate):
         self._logger.debug('Got set max rate with: '+str(maxrate))
-        try:
-            maxrate = tuple([float(x) for x in maxrate])
-            assert len(maxrate)==2
-        except TypeError:
-            maxrate = (float(maxrate), float(maxrate))
+        assert len(maxrate) in [1, 2], 'rate limits must be single value or 1x2 tuple'
+        if len(maxrate)==1:
+            maxrate = tuple(float(maxrate), float(maxrate))
+        elif len(maxrate)==2:
+            maxrate = tuple([float(x) for x in maxrate])        
         self._max_speed = maxrate
-        self._logger.debug('Set max to: '+str(self.max_rate))
+        self._logger.debug('Set max rates to: '+str(self.max_rate))
 
     @property
     def alt_limit(self):
@@ -496,15 +496,17 @@ class Mount:
                 self._ascom_canSlewAltAz = self._ascom_telescope.CanSlewAltAz
             except:
                 self._ascom_canSlewAltAz = False
-                
+            max_speed = [0, 0]
             for axis in [0, 1]:
                 self._logger.debug('axis ' + str(axis) + ' rate count: ' + str(self._ascom_telescope.AxisRates(axis).Count))
                 for i in range(1, self._ascom_telescope.AxisRates(axis).Count+1):
                     self._logger.debug('axis rate ' + str(i) + ' min: ' + str(self._ascom_telescope.AxisRates(axis).Item(i).Minimum) + ', max: ' + str(self._ascom_telescope.AxisRates(axis).Item(i).Maximum))
+                max_speed[axis] = self._ascom_telescope.AxisRates(axis).Item(i).Maximum
             for i in range(1, self._ascom_telescope.AxisRates(self._ascom_scope_alt_axis).Count+1):
                 self._ascom_availableRatesAlt.append(float(self._ascom_telescope.AxisRates(self._ascom_scope_alt_axis).Item(i).Maximum))
             for i in range(1, self._ascom_telescope.AxisRates(self._ascom_scope_azi_axis).Count+1):
                 self._ascom_availableRatesAzi.append(float(self._ascom_telescope.AxisRates(self._ascom_scope_azi_axis).Item(i).Maximum))
+            self.max_rate = (max_speed[self._ascom_scope_alt_axis], max_speed[self._ascom_scope_azi_axis])
             self._is_init = True
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -592,15 +594,14 @@ class Mount:
         self._logger.debug('Stopping mount first')
         self.stop()
         if self.model == 'celestron' or self.model.lower() == "ascom":
-            self._logger.debug('Using celestron, ensure range -180 to 180')
+            self._logger.debug('Adjusting range to -180 to 180')
             alt = self.degrees_to_n180_180(alt - self._alt_zero)
             alt = self.degrees_to_n180_180(alt)
             azi = self.degrees_to_n180_180(azi)
-            
         self._logger.debug('Will command: alt=' + str(alt) + ' azi=' + str(azi))
         if rate_control: #Use own control thread
             self._logger.debug('Starting rate controller')
-            Kp = 1.5
+            Kp = 0.25
             self._control_thread_stop = False
             success = [False]
             def _loop_slew_to(alt, azi, success):
@@ -609,16 +610,18 @@ class Mount:
                     eAlt = Kp * self.degrees_to_n180_180(alt - curr_pos[0])
                     eAzi = Kp * self.degrees_to_n180_180(azi - curr_pos[1])
                     if eAlt < -self._max_speed[0]: eAlt = -self._max_speed[0]
-                    if eAlt > self._max_speed[0]: eAlt = self._max_speed[0]
+                    if eAlt >  self._max_speed[0]: eAlt =  self._max_speed[0]
                     if eAzi < -self._max_speed[1]: eAzi = -self._max_speed[1]
-                    if eAzi > self._max_speed[1]: eAzi = self._max_speed[1]
+                    if eAzi >  self._max_speed[1]: eAzi =  self._max_speed[1]
 
-                    if abs(eAlt)<.001 and abs(eAzi)<.001:
+                    if abs(eAlt)<1.0 and abs(eAzi)<1.0:
                         self.set_rate_alt_az(0, 0)
                         success[0] = True
                         break
                     else:
                         self.set_rate_alt_az(eAlt, eAzi)
+                    sleep(0.001)
+                self._logger.debug('exiting rate control loop')
                 self._control_thread_stop = True
             self._control_thread = Thread(target=_loop_slew_to, args=(alt, azi, success))
             self._control_thread.start()
@@ -687,7 +690,7 @@ class Mount:
         """
         assert self.is_init, 'Must be initialised'
         if self.model == 'celestron':
-            self._logger.debug('Using celestron, requesting mount position')
+            #self._logger.debug('Using celestron, requesting mount position')
             def _get_alt_az(ret):
                 command = bytes([ord('z')]) #Get precise AZM-ALT
                 self._cel_serial_port.write(command)
@@ -702,7 +705,7 @@ class Mount:
             t.join()
             alt = self.degrees_to_n180_180( float(ret[0]) / 2**32 * 360 + self._alt_zero)
             azi = self.degrees_to_n180_180( float(ret[1]) / 2**32 * 360 )
-            self._logger.debug('Mount returned: alt=' + str(ret[0]) + ' azi=' + str(ret[1]) \
+            self._logger.debug('Mount position: alt=' + str(ret[0]) + ' azi=' + str(ret[1]) \
                                + ' => alt=' + str(alt) + ' azi=' + str(azi))
             self._state_cache['alt'] = alt
             self._state_cache['azi'] = azi
@@ -737,8 +740,8 @@ class Mount:
         """
         assert self.is_init, 'Must be initialised'
         self._logger.debug('Got rate command. alt=' + str(alt) + ' azi=' + str(azi))
-        if (abs(alt) > self._max_speed[0]) or  (abs(azi) > self._max_speed[0]):
-            raise ValueError('Above maximum speed!')
+        if (abs(alt) > self._max_speed[0]) or  (abs(azi) > self._max_speed[1]):
+            raise ValueError('Above maximum speed! ('+str(abs(alt))+', '+str(abs(azi))+')')
         if self.model == 'celestron':
             self._logger.debug('Using celestron, sending rate command to mount')
             success = [False]
@@ -773,35 +776,34 @@ class Mount:
             self._logger.debug('Send successful')
             self._state_cache['alt_rate'] = alt
             self._state_cache['azi_rate'] = azi
+            
         elif self.model.lower() == "ascom":
-            if alt == 0:  alt_rate = 0
             requested_rates = [0, 0]
             requested_rates[self._ascom_scope_alt_axis] = alt
             requested_rates[self._ascom_scope_azi_axis] = azi
             rates = [0, 0]
+            # Verify requested rates are within allowable ranges, or round down to nearest allowed range:
             for axis in [0, 1]:
                 requested_rate_mag = abs(requested_rates[axis])
                 requested_rate_sign = 1 if requested_rates[axis]>=0 else -1
                 self._logger.debug('axis ' + str(axis) + ' requested rate mag: ' + str(requested_rate_mag) + ', sign: ' + str(requested_rate_sign))
-                for i in range(1, self._ascom_telescope.AxisRates(axis).Count+1):                    
-                    if requested_rate_mag >= self._ascom_telescope.AxisRates(axis).Item(i).Minimum and \
-                       requested_rate_mag <= self._ascom_telescope.AxisRates(axis).Item(i).Maximum:
-                        rates[axis] = requested_rate_mag * requested_rate_sign
+                for i in range(1, self._ascom_telescope.AxisRates(axis).Count+1):
+                    if requested_rate_mag >= self._ascom_telescope.AxisRates(axis).Item(i).Minimum:
+                        if requested_rate_mag <= self._ascom_telescope.AxisRates(axis).Item(i).Maximum:
+                            rates[axis] = requested_rate_mag * requested_rate_sign
+                            break
+                        else:
+                            rates[axis] = self._ascom_telescope.AxisRates(axis).Item(i).Maximum * requested_rate_sign
+                    else:
                         break
-                    elif requested_rates[axis] >= self._ascom_telescope.AxisRates(axis).Item(i).Maximum:
-                        rates[axis] = self._ascom_telescope.AxisRates(axis).Item(i).Maximum * requested_rate_sign
                 rates[axis] *= self._axis_directions[axis]
-            self._logger.debug('Commanding rates: alt '+str(rates[self._ascom_scope_alt_axis])+', azi '+str(rates[self._ascom_scope_azi_axis]))
-            success = [False]
-            try:
-                self._ascom_telescope.MoveAxis(self._ascom_scope_alt_axis, rates[self._ascom_scope_alt_axis])
-                self._ascom_telescope.MoveAxis(self._ascom_scope_azi_axis, rates[self._ascom_scope_azi_axis])
-                self._state_cache['alt_rate'] = rates[self._ascom_scope_alt_axis]
-                self._state_cache['azi_rate'] = rates[self._ascom_scope_azi_axis]
-                success[0] = True
-            except:
-                self._logger.warning('Alt/az rate commanding failed. ['+str(rates[self._ascom_scope_alt_axis])+','+str(rates[self._ascom_scope_azi_axis])+']')
-                success[0] = False
+            self._logger.debug('Commanding alt rate: '+str(rates[self._ascom_scope_alt_axis]))
+            self._ascom_telescope.MoveAxis(self._ascom_scope_alt_axis, rates[self._ascom_scope_alt_axis])
+            self._state_cache['alt_rate'] = rates[self._ascom_scope_alt_axis]
+            self._logger.debug('Commanding azi rate: '+str(rates[self._ascom_scope_azi_axis]))
+            self._ascom_telescope.MoveAxis(self._ascom_scope_azi_axis, rates[self._ascom_scope_azi_axis])
+            self._state_cache['azi_rate'] = rates[self._ascom_scope_azi_axis]
+
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -818,7 +820,8 @@ class Mount:
             self._logger.debug('Sending zero rate command')
             self.set_rate_alt_az(0, 0)
             if self.model.lower() == "ascom":
-                self._ascom_telescope.AbortSlew()        
+                if self._ascom_telescope.Slewing:
+                    self._ascom_telescope.AbortSlew()        
         self._logger.debug('Stopped mount')
 
     def wait_for_move_to(self, timeout=120):
