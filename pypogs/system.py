@@ -37,6 +37,7 @@ from csv import writer as csv_write
 import numpy as np
 from astropy.time import Time as apy_time
 from astropy import units as apy_unit, coordinates as apy_coord, utils as apy_util
+from satellite_tle import fetch_tle_from_celestrak
 from skyfield import sgp4lib as sgp4
 from skyfield import api as sf_api
 from tifffile import imwrite as tiff_write
@@ -160,6 +161,12 @@ class System:
                        '2 28647  56.9987 238.9694 0122260 223.0550 136.0876 15.05723818  6663']
                 sys.target.set_target_from_tle(tle)
 
+        Example satellite by ID:
+            ::
+            
+                tle = sys.target.get_tle_from_sat_id(25544)
+                sys.target.set_target_from_tle(tle)                
+                
         Example star:
             ::
 
@@ -227,6 +234,8 @@ class System:
         self._star_cam = None
         self._receiver = None
         self._mount = None
+        self._supported_models = {'mount': Mount._supported_models, 'camera': Camera._supported_models, 'receiver': Receiver._supported_models}
+        self._default_model = {'mount': Mount._default_model, 'camera': Camera._default_model, 'receiver': Receiver._default_model}
         self._alignment = Alignment()
         self._target = Target()
         # Variable to stop system thread
@@ -1806,7 +1815,19 @@ class Target:
         """
         self.target_object = apy_coord.SkyCoord(ra, dec, unit='deg')
         self.set_start_end_time(start_time, end_time)
-
+        
+    def get_tle_from_sat_id(self, sat_id):
+        """Fetches TLE for a satellite specified by NORAD satellite ID.
+        
+        Args:
+            sat_id (unsigned int):  NORAD satellite ID number.        
+        """
+        try:
+            tle = fetch_tle_from_celestrak(sat_id)
+            return (tle[1], tle[2], tle[0])
+        except:
+            tle = None
+        
     def set_target_deep_by_name(self, name, start_time=None, end_time=None):
         """Use Astropy name lookup for setting a SkyCoord deep sky target.
 

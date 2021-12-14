@@ -81,6 +81,7 @@ class Receiver:
 
     """
     _supported_models = ('ni_daq',)
+    _default_model = 'ni_daq'
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, data_folder=None,\
                  debug_folder=None):

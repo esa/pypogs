@@ -83,6 +83,7 @@ class Camera:
             cam.deinitialize()
     """
     _supported_models = ('ptgrey','ascom')
+    _default_model = 'ascom'
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
         """Create Camera instance. See class documentation."""
@@ -328,6 +329,7 @@ class Camera:
             #else:
             #    self._log_debug("Camera available. Setting identity.")
             self._identity = identity
+            self._log_debug('Specified identity: "'+str(self.identity)+'" ['+str(len(self.identity))+']')
             #ascom_camera = None
 
         else:
@@ -442,7 +444,7 @@ class Camera:
                 ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
                 ascomSelector.DeviceType = 'Camera'
                 camDriverName = ascomSelector.Choose('None')
-                self._log_debug("Selected camera driver: "+camDriverName)
+                self._logger.info("Selected camera driver: "+camDriverName)
                 if not camDriverName:            
                     self._log_debug('User canceled camera selection')
             assert camDriverName, 'Unable to identify ASCOM camera.'
@@ -575,7 +577,7 @@ class Camera:
                     'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
         elif self.model.lower() == 'ascom':
             return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',\
-                     'gain', 'exposure_time')    # FIXME             
+                     'gain', 'exposure_time')           
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -914,8 +916,7 @@ class Camera:
                 self._log_debug('Returning '+str(val))
                 return val
         elif self.model.lower() == 'ascom':
-            self._log_debug('gain setting not yet implemented in ASCOM')
-            return 0
+            return (self._ascom_camera.GainMin, self._ascom_camera.GainMax)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -939,8 +940,7 @@ class Camera:
                 self._log_debug('Returning '+str(val))
                 return val
         elif self.model.lower() == 'ascom':
-            self._log_debug('gain setting not yet implemented in ASCOM')
-            return 0
+            return self._ascom_camera.Gain
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -972,8 +972,10 @@ class Camera:
                     else:
                         raise #Rethrows error
         elif self.model.lower() == 'ascom':
-            self._log_debug('gain setting not yet implemented in ASCOM')
-            return 0
+            if exposure_sec < self._ascom_camera.ExposureMin or exposure_sec > self._ascom_camera.ExposureMax:
+                self._log_debug('Exposure time out of allowable range ('+str(self._ascom_camera.ExposureMin)+':'+str(self._ascom_camera.ExposureMax))
+                raise AssertionError('Requested exposure time ['+str(exposure_sec)+'] out of allowable range.')                
+            self._ascom_camera.Gain.value = gain_db
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1086,10 +1088,8 @@ class Camera:
                 self._log_debug('Returning '+str(val))
                 return val
         elif self.model.lower() == 'ascom':
-            try:
-                return self._ascom_camera.LastExposureDuration
-            except:
-                return 0
+            self._log_debug('Returning '+str(self._exposure_sec*1000))
+            return self._exposure_sec*1000
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1156,11 +1156,15 @@ class Camera:
             except PySpin.SpinnakerException:
                 self._log_warning('Failed to read', exc_info=True)
         elif self.model.lower() == 'ascom':
-            binMax = self._ascom_camera.MaxBinX
-            if binMax:
-                return binMax
-            else:
-                self._log_debug('Error reading camera bin value')            
+            try:
+                val_horiz = self._ascom_camera.BinX
+                val_vert = self._ascom_camera.BinY
+                self._log_debug('Got '+str(val_horiz)+' '+str(val_vert))
+                if val_horiz != val_vert:
+                    self._log_warning('Horzontal and vertical binning is not equal.')
+                return val_horiz
+            except PySpin.SpinnakerException:
+                self._log_warning('Failed to read binning property', exc_info=True)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1349,14 +1353,18 @@ class Camera:
             try:
                 max_w = self._ascom_camera.CameraXSize
                 max_h = self._ascom_camera.CameraYSize
-                binning = self._ascom_camera.binning
                 if not max_h or not max_w:
                     raise AssertionError('Unable to read ASCOM camera image size limits.')
-                if not binning:
+                try:
+                  bin_w = self._ascom_camera.BinX
+                  bin_h = self._ascom_camera.BinY
+                except:
+                  raise AssertionError('Unable to read ASCOM camera binning value.')
+                if not bin_h or not bin_w:
                     raise AssertionError('Unable to read ASCOM camera binning value.')
                 try:
-                    self._ascom_camera.NumX = max_w/binning
-                    self._ascom_camera.NumY = max_h/binning
+                    self._ascom_camera.NumX = max_w/bin_w
+                    self._ascom_camera.NumY = max_h/bin_h
                 except:
                     raise AssertionError('Unable to set ASCOM camera image size.')
             except:

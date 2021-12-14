@@ -87,6 +87,7 @@ class Mount:
     """
 
     _supported_models = ('celestron','ascom',)
+    _default_model = 'ascom'
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
         """Create Mount instance. See class documentation."""
@@ -276,18 +277,18 @@ class Mount:
                 raise AssertionError('Failed to open the serial port named: '+str(identity))
             self._identity = identity
         elif self.model.lower() == 'ascom':
-            self._logger.debug('Attempting to connect to ASCOM device "'+str(self.identity)+'"')
+            self._logger.debug('Attempting to connect to ASCOM device "'+str(identity)+'"')
             if not hasattr(self, '_ascom_driver_handler'):
                 self._logger.debug('Loading ASCOM win32com device handler')
                 import win32com.client
                 self._ascom_driver_handler = win32com.client
             ascomDriverName = str()
-            if self.identity is not None:
-                self._logger.debug('Specified identity: "'+str(self.identity)+'" ['+str(len(self.identity))+']')
-                if self.identity.startswith('ASCOM'):
-                    ascomDriverName = self.identity
+            if identity is not None:
+                self._logger.debug('Specified identity: "'+str(identity)+'" ['+str(len(identity))+']')
+                if identity.startswith('ASCOM'):
+                    ascomDriverName = identity
                 else:
-                    ascomDriverName = 'ASCOM.'+str(self.identity)+'.telescope'
+                    ascomDriverName = 'ASCOM.'+str(identity)+'.telescope'
             else:
                 ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
                 ascomSelector.DeviceType = 'Telescope'
