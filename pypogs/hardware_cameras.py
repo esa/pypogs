@@ -972,10 +972,10 @@ class Camera:
                     else:
                         raise #Rethrows error
         elif self.model.lower() == 'ascom':
-            if exposure_sec < self._ascom_camera.ExposureMin or exposure_sec > self._ascom_camera.ExposureMax:
-                self._log_debug('Exposure time out of allowable range ('+str(self._ascom_camera.ExposureMin)+':'+str(self._ascom_camera.ExposureMax))
-                raise AssertionError('Requested exposure time ['+str(exposure_sec)+'] out of allowable range.')                
-            self._ascom_camera.Gain.value = gain_db
+            if gain_db < self._ascom_camera.GainMin or gain_db > self._ascom_camera.GainMax:
+                self._log_debug('Requested gain out of allowable range ('+str(self._ascom_camera.GainMin)+':'+str(self._ascom_camera.GainMax))
+                raise AssertionError('Requested gain ['+str(gain_db)+'] out of allowable range.')
+            self._ascom_camera.Gain = gain_db
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
