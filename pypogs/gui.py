@@ -32,6 +32,7 @@ from PIL import Image, ImageTk
 import numpy as np
 from pathlib import Path
 import logging
+import sys, os, traceback
 
 COMMAND = 0
 MOUNT = 1
@@ -361,9 +362,9 @@ class TrackingControlFrame(ttk.Frame):
                                                                                             .grid(sticky=tk.W)
         ttk.Checkbutton(auto_frame, text='Fine', variable=self.auto_fine, command=self.fine_callback) \
                                                                                             .grid(sticky=tk.W)
-        ttk.Button(self, text='Start Tracking', command=self.start_callback, width=12) \
+        ttk.Button(self, text='Start Tracking', command=self.start_tracking_callback, width=12) \
                                                                 .pack(fill=tk.BOTH, expand=True)
-        ttk.Button(self, text='Stop Tracking', command=self.stop_callback, width=12) \
+        ttk.Button(self, text='Stop Tracking', command=self.stop_tracking_callback, width=12) \
                                                                 .pack(fill=tk.BOTH, expand=True)
         self.update()
 
@@ -418,13 +419,14 @@ class TrackingControlFrame(ttk.Frame):
             ErrorPopup(self, err, self.logger)
 #        self.update()
 
-    def start_callback(self):
+    def start_tracking_callback(self):
         try:
             self.sys.start_tracking()
         except Exception as err:
             self.logger.debug('Did not start tracking', exc_info=True)
             ErrorPopup(self, err, self.logger)
-    def stop_callback(self):
+    def stop_tracking_callback(self):
+        self.logger.debug('TrackingControlFrame got stop request')
         try:
             self.sys.stop()
         except Exception as err:
@@ -1088,7 +1090,7 @@ class HardwareFrame(ttk.Frame):
         self.logger.debug('HardwareFrame mount button clicked')
         try:
             if self.mount_popup is None:
-                self.mount_popup = self.HardwarePopup(self, self.sys.mount, self.sys.add_mount, self.sys.clear_mount, \
+                self.mount_popup = self.HardwarePopup(self, 'mount', self.sys.mount, self.sys.add_mount, self.sys.clear_mount, \
                                                       title='Mount', default_name='UnnamedMount')
             else:
                 self.mount_popup.update()
@@ -1101,7 +1103,7 @@ class HardwareFrame(ttk.Frame):
         self.logger.debug('HardwareFrame star button clicked')
         try:
             if self.star_popup is None:
-                self.star_popup = self.HardwarePopup(self, self.sys.star_camera, self.sys.add_star_camera, \
+                self.star_popup = self.HardwarePopup(self, 'camera', self.sys.star_camera, self.sys.add_star_camera, \
                                                      self.sys.clear_star_camera, title='Star camera', \
                                                      default_name='StarCamera', link_device=self.sys.coarse_camera, \
                                                      link_func=self.sys.add_coarse_camera_from_star)
@@ -1116,7 +1118,7 @@ class HardwareFrame(ttk.Frame):
         self.logger.debug('HardwareFrame coarse button clicked')
         try:
             if self.coarse_popup is None:
-                self.coarse_popup = self.HardwarePopup(self, self.sys.coarse_camera, self.sys.add_coarse_camera, \
+                self.coarse_popup = self.HardwarePopup(self, 'camera', self.sys.coarse_camera, self.sys.add_coarse_camera, \
                                                        self.sys.clear_coarse_camera, title='Coarse camera', \
                                                        default_name='CoarseCamera', link_device=self.sys.star_camera, \
                                                        link_func=self.sys.add_star_camera_from_coarse)
@@ -1131,7 +1133,7 @@ class HardwareFrame(ttk.Frame):
         self.logger.debug('HardwareFrame fine button clicked')
         try:
             if self.fine_popup is None:
-                self.fine_popup = self.HardwarePopup(self, self.sys.fine_camera, self.sys.add_fine_camera, \
+                self.fine_popup = self.HardwarePopup(self, 'camera', self.sys.fine_camera, self.sys.add_fine_camera, \
                                                      self.sys.clear_fine_camera, title='Fine camera', \
                                                      default_name='FineCamera')
             else:
@@ -1145,7 +1147,7 @@ class HardwareFrame(ttk.Frame):
         self.logger.debug('HardwareFrame receiver button clicked')
         try:
             if self.receiver_popup is None:
-                self.receiver_popup = self.HardwarePopup(self, self.sys.receiver, self.sys.add_receiver, \
+                self.receiver_popup = self.HardwarePopup(self, 'receiver', self.sys.receiver, self.sys.add_receiver, \
                                                      self.sys.clear_receiver, title='Receiver', \
                                                      default_name='UnnamedReceiver')
             else:
@@ -1178,7 +1180,7 @@ class HardwareFrame(ttk.Frame):
 
         For star/coarse camera, pass the other one in link_device to get the option to join them.
         """
-        def __init__(self, master, device, add_func, clear_func, link_device=0, link_func=0, properties_frame=None, \
+        def __init__(self, master, device_type, device, add_func, clear_func, link_device=0, link_func=0, properties_frame=None, \
                      title='Hardware', default_name=''):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
             self.logger = master.logger
@@ -1190,19 +1192,17 @@ class HardwareFrame(ttk.Frame):
             self.link_device = link_device
             self.link_func = link_func
             self.default_name = default_name
-
+            
             setup_frame = ttk.Frame(self)
             setup_frame.grid(row=0, column=0, sticky=tk.S)
             self.linked_bool = tk.BooleanVar()
             r = 0
             if link_device != 0:
-                ttk.Checkbutton(setup_frame, text='Link Star and Coarse', variable=self.linked_bool) \
-                                                                .grid(row=r, column=0)
-                r+=1
-
+                ttk.Checkbutton(setup_frame, text='Link Star and Coarse', variable=self.linked_bool).grid(row=r, column=0); r+=1
             ttk.Label(setup_frame, text='Model:').grid(row=r, column=0); r+=1
-            self.model_entry = ttk.Entry(setup_frame, width=20)
-            self.model_entry.grid(row=r, column=0); r+=1
+            self.model_combo = ttk.Combobox(setup_frame, width=20, values=master.sys._supported_models[device_type])
+            self.model_combo.grid(row=r, column=0); r+=1
+            self.model_combo.set(master.sys._default_model[device_type])
             ttk.Label(setup_frame, text='Identity:').grid(row=r, column=0); r+=1
             self.identity_entry = ttk.Entry(setup_frame, width=20)
             self.identity_entry.grid(row=r, column=0); r+=1
@@ -1223,9 +1223,7 @@ class HardwareFrame(ttk.Frame):
 
         def update(self):
             self.logger.debug('HardwarePopup got update request')
-            self.model_entry.delete(0, 'end')
             self.identity_entry.delete(0, 'end')
-            self.name_entry.delete(0, 'end')
             if self.device is None:
                 model = ''
                 identity = ''
@@ -1236,12 +1234,13 @@ class HardwareFrame(ttk.Frame):
                 identity = self.device.identity
                 if identity is None: identity = ''
                 name = self.device.name
-            self.model_entry.insert(0, model)
+                self.update_properties()
+            self.identity_entry.delete(0, tk.END)
             self.identity_entry.insert(0, identity)
+            self.name_entry.delete(0, tk.END)
             self.name_entry.insert(0, name)
             self.linked_bool.set(self.device is not None and self.device is self.link_device)
-            self.master.update()
-            self.update_properties()
+            self.master.update()            
 
         def clear_callback(self):
             self.logger.debug('HardwarePopup clear button clicked')
@@ -1252,7 +1251,7 @@ class HardwareFrame(ttk.Frame):
         def connect_callback(self):
             self.logger.debug('HardwarePopup connect button clicked')
             # Read the entries
-            model = self.model_entry.get()
+            model = self.model_combo.get()
             if not model.strip(): model = None
             identity = self.identity_entry.get()
             if not identity.strip(): identity = None
@@ -1409,8 +1408,17 @@ class TargetFrame(ttk.Frame):
             self.title('Target')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
+
+            get_tle_frame = ttk.Frame(self)
+            get_tle_frame.grid(row=0, column=0, padx=(0,10), pady=10)
+            ttk.Label(get_tle_frame, text='Get TLE from satellite ID:').grid(row=0, column=0, columnspan=2)
+            ttk.Label(get_tle_frame, text='NORAD ID:').grid(row=1, column=0, sticky=tk.E)
+            self.sat_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
+            self.sat_id_entry.grid(row=1, column=1)
+            ttk.Button(get_tle_frame, text='Get', command=self.get_tle_callback).grid(row=1, column=2, sticky=tk.W+tk.E)
+
             tle_frame = ttk.Frame(self)
-            tle_frame.grid(row=0, column=0, columnspan=2, padx=(0,10), pady=10)
+            tle_frame.grid(row=1, column=0, columnspan=2, padx=(0,10), pady=10)
             ttk.Label(tle_frame, text='Set target from TLE:').grid(row=0, column=0)
             self.tle_line1_entry = ttk.Entry(tle_frame, width=69, font='TkFixedFont')
             self.tle_line1_entry.grid(row=1, column=0)
@@ -1419,7 +1427,7 @@ class TargetFrame(ttk.Frame):
             ttk.Button(tle_frame, text='Set', command=self.tle_callback).grid(row=3, column=0, sticky=tk.W+tk.E)
 
             radec_frame = ttk.Frame(self)
-            radec_frame.grid(row=1, column=0, padx=(10,0), pady=10)
+            radec_frame.grid(row=2, column=0, padx=(10,0), pady=10)
             ttk.Label(radec_frame, text='Set target from RA/Dec:').grid(row=0, column=0, columnspan=2)
             ttk.Label(radec_frame, text='RA: (deg)').grid(row=1, column=0, sticky=tk.E)
             self.ra_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
@@ -1431,7 +1439,7 @@ class TargetFrame(ttk.Frame):
                                                 .grid(row=3, column=1, sticky=tk.W+tk.E)
 
             time_frame = ttk.Frame(self)
-            time_frame.grid(row=1, column=1, padx=(10,0), pady=10)
+            time_frame.grid(row=2, column=1, padx=(10,0), pady=10)
             ttk.Label(time_frame, text='Set tracking time (optional):').grid(row=0, column=0, columnspan=3)
             ttk.Label(time_frame, text='Start: (UTC)').grid(row=1, column=0, sticky=tk.E)
             self.start_entry = ttk.Entry(time_frame, width=25, font='TkFixedFont')
@@ -1478,6 +1486,27 @@ class TargetFrame(ttk.Frame):
             self.end_entry.insert(0, str(t_end) if t_end is not None else '')
             self.master.update()
 
+        def get_tle_callback(self):
+            self.logger.debug("TLE requested for sat ID: " + self.sat_id_entry.get())        
+            try:
+                sat_id = int(self.sat_id_entry.get())
+            except:
+                self.logger.debug("sat ID invalid")
+                sat_id = None
+            if sat_id:
+                tle = self.master.sys.target.get_tle_from_sat_id(sat_id)
+                if tle is not None and len(tle)==3:
+                    self.tle_line1_entry.insert(0,tle[0])
+                    self.tle_line2_entry.insert(0,tle[1])
+                    sat_name = tle[2]
+                    self.logger.debug('successfully fetched TLE for sat ID '+str(sat_id)+', "'+sat_name+'"')
+                    self.logger.debug(tle[0])
+                    self.logger.debug(tle[1])
+                    self.logger.debug(tle[2])
+                else:
+                    self.logger.debug('unable to fetch TLE for sat ID ' +str(sat_id))
+
+                    
         def tle_callback(self):
             try:
                 line1 = self.tle_line1_entry.get()
@@ -1815,6 +1844,7 @@ class ErrorPopup(tk.Toplevel):
     """Extends tkinter.Toplevel for error popups"""
     def __init__(self, master, error, logger):
         logger.debug('ErrorPopup: Got error: ' + str(error))
+        print(traceback.format_exc())
         super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
         self.title('Error')
         self.grab_set() #Grab control
