@@ -89,7 +89,7 @@ class Mount:
     _supported_models = ('celestron','ascom',)
     _default_model = 'ascom'
 
-    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
+    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, axis_directions=None):
         """Create Mount instance. See class documentation."""
         # Logger setup
         self._debug_folder = None
@@ -126,7 +126,7 @@ class Mount:
         self._azi_limit = (None, None) #limit degees
         self._home_pos = (0, 0) #Home position
         self._alt_zero = 0 #Amount to subtract from alt.
-        self._axis_directions = (1, 1) #set to 1 to use mount default axis direction, -1 to invert direction
+        self._axis_directions = axis_directions or (1, 1)  #set to 1 to use mount default axis direction, -1 to invert direction
         # Only used for model celestron
         self._cel_serial_port = None
         # Only used for model ascom

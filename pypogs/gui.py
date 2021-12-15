@@ -1351,6 +1351,7 @@ class TargetFrame(ttk.Frame):
         self.status_label.grid(row=2, column=0, columnspan=2)
         ttk.Button(self, text='Set Manual', command=self.manual_button_callback, width=15).grid(row=3, column=0)
         ttk.Button(self, text='Set from File', command=self.file_button_callback, width=15).grid(row=3, column=1)
+        ttk.Button(self, text='Go To Target', command=self.go_to_target_callback, width=15).grid(row=4, column=0)        
         self.manual_popup = None
 
     def update(self):
@@ -1399,6 +1400,19 @@ class TargetFrame(ttk.Frame):
             raise NotImplementedError('Feature coming soon!')
         except Exception as err:
             ErrorPopup(self, err, self.logger)
+            
+    def go_to_target_callback(self):
+        self.logger.debug('MountControlFrame Go to target clicked')
+        assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
+        try:
+            itrf_xyz = self.sys.get_itrf_direction_of_target()
+            enu_altaz = self.sys.alignment.get_enu_altaz_from_itrf_xyz(itrf_xyz)
+            altaz_string = 'Alt:' + str(round(enu_altaz[0],1)) + DEG + ' Az:' + str(round(enu_altaz[1],1)) + DEG
+            self.logger.debug('Target coordinates: '+altaz_string)
+            self.logger.debug('Send in EastNorthUp')
+            self.sys.mount.move_to_alt_az(*enu_altaz, block=False)
+        except Exception as err:
+            ErrorPopup(self.master, err, self.logger)
 
     class ManualPopup(tk.Toplevel):
         """Extends tk.Toplevel for setting target manually."""
@@ -1410,15 +1424,18 @@ class TargetFrame(ttk.Frame):
 #            self.grab_set() #Grab control
 
             get_tle_frame = ttk.Frame(self)
-            get_tle_frame.grid(row=0, column=0, padx=(0,10), pady=10)
-            ttk.Label(get_tle_frame, text='Get TLE from satellite ID:').grid(row=0, column=0, columnspan=2)
+            get_tle_frame.grid(row=0, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E)
+            ttk.Label(get_tle_frame, text='Get TLE from satellite ID:').grid(row=0, column=0, columnspan=3)
             ttk.Label(get_tle_frame, text='NORAD ID:').grid(row=1, column=0, sticky=tk.E)
             self.sat_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
             self.sat_id_entry.grid(row=1, column=1)
-            ttk.Button(get_tle_frame, text='Get', command=self.get_tle_callback).grid(row=1, column=2, sticky=tk.W+tk.E)
+            ttk.Button(get_tle_frame, text='Get', command=self.get_tle_callback).grid(row=1, column=2)
+            ttk.Button(get_tle_frame, text='Get & Set TLE', command=self.get_and_set_tle_callback).grid(row=1, column=3, sticky=tk.W+tk.E)
+            self.sat_name_label = ttk.Label(get_tle_frame, font='TkFixedFont')
+            self.sat_name_label.grid(row=1, column=4, columnspan=1, padx=10)
 
             tle_frame = ttk.Frame(self)
-            tle_frame.grid(row=1, column=0, columnspan=2, padx=(0,10), pady=10)
+            tle_frame.grid(row=1, column=0, columnspan=5, padx=(0,10), pady=10)
             ttk.Label(tle_frame, text='Set target from TLE:').grid(row=0, column=0)
             self.tle_line1_entry = ttk.Entry(tle_frame, width=69, font='TkFixedFont')
             self.tle_line1_entry.grid(row=1, column=0)
@@ -1427,7 +1444,7 @@ class TargetFrame(ttk.Frame):
             ttk.Button(tle_frame, text='Set', command=self.tle_callback).grid(row=3, column=0, sticky=tk.W+tk.E)
 
             radec_frame = ttk.Frame(self)
-            radec_frame.grid(row=2, column=0, padx=(10,0), pady=10)
+            radec_frame.grid(row=2, column=0, columnspan=3, padx=(10,0), pady=10)
             ttk.Label(radec_frame, text='Set target from RA/Dec:').grid(row=0, column=0, columnspan=2)
             ttk.Label(radec_frame, text='RA: (deg)').grid(row=1, column=0, sticky=tk.E)
             self.ra_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
@@ -1439,7 +1456,7 @@ class TargetFrame(ttk.Frame):
                                                 .grid(row=3, column=1, sticky=tk.W+tk.E)
 
             time_frame = ttk.Frame(self)
-            time_frame.grid(row=2, column=1, padx=(10,0), pady=10)
+            time_frame.grid(row=2, column=3, columnspan=3, padx=(10,0), pady=10)
             ttk.Label(time_frame, text='Set tracking time (optional):').grid(row=0, column=0, columnspan=3)
             ttk.Label(time_frame, text='Start: (UTC)').grid(row=1, column=0, sticky=tk.E)
             self.start_entry = ttk.Entry(time_frame, width=25, font='TkFixedFont')
@@ -1489,23 +1506,29 @@ class TargetFrame(ttk.Frame):
         def get_tle_callback(self):
             self.logger.debug("TLE requested for sat ID: " + self.sat_id_entry.get())        
             try:
-                sat_id = int(self.sat_id_entry.get())
+                self.sat_id = int(self.sat_id_entry.get())
             except:
                 self.logger.debug("sat ID invalid")
-                sat_id = None
-            if sat_id:
-                tle = self.master.sys.target.get_tle_from_sat_id(sat_id)
+                self.sat_name_label['text'] = ''
+                self.sat_id = None
+            if self.sat_id:
+                tle = self.master.sys.target.get_tle_from_sat_id(self.sat_id)
                 if tle is not None and len(tle)==3:
                     self.tle_line1_entry.insert(0,tle[0])
                     self.tle_line2_entry.insert(0,tle[1])
                     sat_name = tle[2]
-                    self.logger.debug('successfully fetched TLE for sat ID '+str(sat_id)+', "'+sat_name+'"')
+                    self.sat_name_label['text'] = sat_name or ''
+                    self.logger.debug('successfully fetched TLE for sat ID '+str(self.sat_id)+', "'+sat_name+'"')
                     self.logger.debug(tle[0])
                     self.logger.debug(tle[1])
                     self.logger.debug(tle[2])
                 else:
-                    self.logger.debug('unable to fetch TLE for sat ID ' +str(sat_id))
+                    self.logger.debug('unable to fetch TLE for sat ID ' +str(self.sat_id))
 
+        def get_and_set_tle_callback(self):
+            self.get_tle_callback()
+            if self.sat_id is not None:
+                self.tle_callback()
                     
         def tle_callback(self):
             try:
