@@ -148,6 +148,7 @@ class Mount:
             self.identity = identity
         if model is not None:
             self.initialize()
+        self._is_sidereal_tracking = False
         # Try to get Python to clean up the object properly
         import atexit, weakref
         atexit.register(weakref.ref(self.__del__))
@@ -436,6 +437,20 @@ class Mount:
                                , int(axis_dirs[1]) if axis_dirs[1] is not None else None)
         self._logger.debug('Set axis directions to: '+str(self._axis_directions))
         
+    @property
+    def is_sidereal_tracking(self):
+        """bool: True if the device is in sidereal tracking mode."""
+        return self._is_sidereal_tracking        
+    @is_sidereal_tracking.setter
+    def is_sidereal_tracking(self, enable_sidereal):
+        """bool: Set to True to enable sidereal tracking mode."""
+        elf._logger.debug('Setting is_sidereal_tracking to '+str(enable_sidereal))
+        if enable_sidereal:
+            self._logger.debug('Enabling sidereal tracking') 
+            self.start_sidereal_tracking()
+        else:
+            self._logger.debug('Disabling sidereal tracking') 
+            self.stop_sidereal_tracking()
         
     def initialize(self):
         """Initialise (make ready to start) the device. The model and identity must be defined."""
@@ -458,7 +473,7 @@ class Mount:
             r = self._cel_serial_port.read(2)
             self._logger.debug('Got response: '+str(r))
             assert len(r)==2 and r[1] == ord('#'), 'Did not get the expected response during initialisation'
-            self._logger.debug('Ensure sidreal tracking is off.')
+            self._logger.debug('Ensure sidereal tracking is off.')
             self._cel_tracking_off()
             self._is_init = True
         elif self.model.lower() == "ascom":
@@ -809,6 +824,28 @@ class Mount:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
 
+    def start_sidereal_tracking(self):
+        """Enable sidereal tracking."""
+        assert self.is_init, 'Must be initialised'
+        if self.model == 'celestron':
+            self._cel_tracking_on()
+        elif self.model == 'ascom':
+            self._ascom_tracking_on()
+        else:
+            self._logger.warning('Forbidden model string defined.')
+            raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+                
+    def stop_sidereal_tracking(self):
+        """Disable sidereal tracking."""
+        if self.is_init:
+            if self.model == 'celestron':
+                self._cel_tracking_off()
+            elif self.model == 'ascom':
+                self._ascom_tracking_off()
+            else:
+                self._logger.warning('Forbidden model string defined.')
+                raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+
     def stop(self):
         """Stop moving."""
         self._logger.debug('Got stop command, check thread')
@@ -820,6 +857,7 @@ class Mount:
         if self.is_init:
             self._logger.debug('Sending zero rate command')
             self.set_rate_alt_az(0, 0)
+            self.stop_sidereal_tracking()
             if self.model.lower() == "ascom":
                 if self._ascom_telescope.Slewing:
                     self._ascom_telescope.AbortSlew()        
@@ -866,17 +904,49 @@ class Mount:
         """float: Convert angle (degrees) to range (-180, 180]"""
         return 180 - (180-float(number))%360
 
+    def _ascom_tracking_off(self):
+        """PRIVATE: Disable sidereal tracking on ascom mount."""
+        if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
+            try:
+                self._ascom_telescope.Tracking = False  #turn off tracking
+                self._is_sidereal_tracking = False
+            except:
+                self._logger.warning('Failed to stop sidereal tracking.')
+        
+    def _ascom_tracking_on(self):
+        """PRIVATE: Enable sidereal tracking on ascom mount."""
+        if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
+            try:
+                self._ascom_telescope.Tracking = True  #turn on tracking
+                self._is_sidereal_tracking = True
+            except:
+                self._logger.warning('Failed to start sidereal tracking.')
+    
     def _cel_tracking_off(self):
-        """PRIVATE: Disable sidreal tracking on celestron mount."""
+        """PRIVATE: Disable sidereal tracking on celestron mount."""
         success = [False]
         def _set_tracking_off(success):
             self._cel_send_bytes_command([ord('T'),0])
             assert self._cel_check_ack(), 'Mount did not acknowledge!'
             success[0] = True
+            self._is_sidereal_tracking = False
         t = Thread(target=_set_tracking_off, args=(success,))
         t.start()
         t.join()
         assert success[0], 'Failed communicating with mount'
+        
+    def _cel_tracking_on(self):
+        """PRIVATE: Enable sidereal tracking on celestron mount."""
+        success = [False]
+        def _set_tracking_on(success):
+            self._cel_send_bytes_command([ord('T'),1])
+            assert self._cel_check_ack(), 'Mount did not acknowledge!'
+            success[0] = True
+            self._is_sidereal_tracking = True
+        t = Thread(target=_set_tracking_on, args=(success,))
+        t.start()
+        t.join()
+        assert success[0], 'Failed communicating with mount'        
 
     def _cel_send_text_command(self,command):
         """PRIVATE: Encode and send str to mount."""

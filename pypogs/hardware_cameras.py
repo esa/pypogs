@@ -118,6 +118,7 @@ class Camera:
         self._name = 'UnnamedCamera'
         self._plate_scale = 1.0
         self._rotation = 0.0
+        self._binning = 1
         self._flipX = False
         self._flipY = False
         self._rot90 = 0 #Number of times to rotate by 90 deg, done after flips
@@ -680,12 +681,12 @@ class Camera:
         This will not affect anything in this class but is used elsewhere. Set this to the physical pixel plate scale
         *before* any binning. When getting the plate scale it will be scaled by the binning factor.
         """
-        return self._plate_scale * self.binning
+        return self._plate_scale * self._binning
     @plate_scale.setter
     def plate_scale(self, arcsec):
         self._log_debug('Set plate scale called with: '+str(arcsec))
         self._plate_scale = float(arcsec)
-        self._log_debug('Plate scale set to: '+str(self.plate_scale))
+        self._log_debug('Plate scale set to: '+str(self._plate_scale))
 
     @property
     def rotation(self):
@@ -1139,6 +1140,7 @@ class Camera:
         Setting will stop and restart camera if running. Will scale size_readout to show the same sensor area.
         """
         assert self.is_init, 'Camera must be initialised'
+        #self._log_debug('Get binning called')
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PySpin')
             import PySpin
@@ -1159,9 +1161,10 @@ class Camera:
             try:
                 val_horiz = self._ascom_camera.BinX
                 val_vert = self._ascom_camera.BinY
-                self._log_debug('Got '+str(val_horiz)+' '+str(val_vert))
+                #self._log_debug('Got '+str(val_horiz)+' '+str(val_vert))
                 if val_horiz != val_vert:
-                    self._log_warning('Horzontal and vertical binning is not equal.')
+                    self._log_warning('Horizontal and vertical binning is not equal.')
+                self._binning = val_horiz
                 return val_horiz
             except PySpin.SpinnakerException:
                 self._log_warning('Failed to read binning property', exc_info=True)
@@ -1178,7 +1181,7 @@ class Camera:
             self._log_debug('Camera is running, stop it and restart immediately after.')
             self.stop()
         initial_size = self.size_readout
-        initial_bin = self.binning
+        initial_bin = self._binning
         self._log_debug('Initial sensor readout area and binning: '+str(initial_size)+' ,'+str(initial_bin))
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PySpin')
@@ -1190,6 +1193,7 @@ class Camera:
             try:
                 node_horiz.SetValue(binning)
                 node_vert.SetValue(binning)
+                self._binning = binning
             except PySpin.SpinnakerException as e:
                 self._log_debug('Failure setting', exc_info=True)
                 if 'OutOfRangeException' in e.message:
@@ -1207,7 +1211,8 @@ class Camera:
                     self._ascom_camera.BinY = binning
                     self._ascom_camera.NumX = self._ascom_camera.CameraXSize/binning
                     self._ascom_camera.NumY = self._ascom_camera.CameraYSize/binning
-                    print(self._ascom_camera.BinX, binning)
+                    self._binning = binning
+                    #print(self._ascom_camera.BinX, binning)
                 except:
                     raise AssertionError('Unable to set camera binning')
             else:
@@ -1215,7 +1220,7 @@ class Camera:
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
-        new_bin = self.binning
+        new_bin = self._binning
         bin_scaling = new_bin/initial_bin
         new_size = [round(sz/bin_scaling) for sz in initial_size]
         self._log_debug('New binning and new size to set: '+str(new_bin)+' ,'+str(new_size))
@@ -1225,11 +1230,14 @@ class Camera:
         except:
             self._log_warning('Failed to scale readout after binning change', exc_info=True)
         if was_running:
+            self._log_debug('Restarting camera imaging loop.')
             try:
                 self.start()
                 self._log_debug('Restarted')
             except Exception:
                 self._log_debug('Failed to restart: ', exc_info=True)
+        else:
+            self._log_debug('Camera imaging loop was not previously running.')
 
     @property
     def size_max(self):
@@ -1412,7 +1420,7 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             return self._ptgrey_camera is not None and self._ptgrey_camera.IsStreaming()
         elif self.model.lower() == 'ascom':
-            return self._ascom_camera.Connected
+            return self._ascom_camera.Connected and self._ascom_camera_imaging_handler._is_running
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
