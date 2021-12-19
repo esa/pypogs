@@ -228,7 +228,7 @@ class ControlPropertiesFrame(ttk.Frame):
         """Extends tk.Toplevel for controller settings"""
         def __init__(self, master, device, title='Control'):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master.logger
+            self._logger = master._logger
             self.device = device
             self.title(title)
             self.resizable(False, False)
@@ -414,6 +414,9 @@ class TrackingControlFrame(ttk.Frame):
 #        self.update()
 
     def start_tracking_callback(self):
+        if self.sys.mount is not None and self.sys.mount.is_init and self.sys.mount.is_sidereal_tracking:
+            self._logger.debug('Sidereal tracking is on.  Will turn off.')
+            self.sys.mount.stop_sidereal_tracking()
         try:
             self.sys.start_tracking()
         except Exception as err:
@@ -1177,7 +1180,7 @@ class HardwareFrame(ttk.Frame):
         def __init__(self, master, device_type, device, add_func, clear_func, link_device=0, link_func=0, properties_frame=None, \
                      title='Hardware', default_name=''):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master.logger
+            self._logger = master._logger
             self.title(title)
             self.resizable(False, False)
             self.device = device
@@ -1396,12 +1399,13 @@ class TargetFrame(ttk.Frame):
             ErrorPopup(self, err, self._logger)
             
     def go_to_target_callback(self):
+        print('Go To Target')
         self._logger.debug('MountControlFrame Go to target clicked')
         assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
         try:
             itrf_xyz = self.sys.get_itrf_direction_of_target()
             enu_altaz = self.sys.alignment.get_enu_altaz_from_itrf_xyz(itrf_xyz)
-            altaz_string = 'Alt:' + str(round(enu_altaz[0],1)) + DEG + ' Az:' + str(round(enu_altaz[1],1)) + DEG
+            altaz_string = 'Alt:' + str(round(enu_altaz[0],3)) + DEG + ' Az:' + str(round(enu_altaz[1],3)) + DEG
             self._logger.debug('Target coordinates: '+altaz_string)
             self._logger.debug('Send in EastNorthUp')
             self.sys.mount.move_to_alt_az(*enu_altaz, block=False)
@@ -1412,7 +1416,7 @@ class TargetFrame(ttk.Frame):
         """Extends tk.Toplevel for setting target manually."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master.logger
+            self._logger = master._logger
             self.title('Target')
             self.resizable(False, False)
 #            self.grab_set() #Grab control

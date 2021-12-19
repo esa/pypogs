@@ -31,7 +31,7 @@ except: pass
 sys.alignment.set_location_lat_lon(lat=34.2, lon=-118.2, height=600)
 sys.alignment.set_alignment_enu()
 try:
-  tle = sys.target.get_tle_from_sat_id(39035)  # ISS = 25544
+  tle = sys.target.get_tle_from_sat_id(23712)  # ISS = 25544
   sys.target.set_target_from_tle(tle)
 except:  pass
   
