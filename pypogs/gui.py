@@ -1197,7 +1197,7 @@ class HardwareFrame(ttk.Frame):
             if link_device != 0:
                 ttk.Checkbutton(setup_frame, text='Link Star and Coarse', variable=self.linked_bool).grid(row=r, column=0); r+=1
             ttk.Label(setup_frame, text='Model:').grid(row=r, column=0); r+=1
-            self.model_combo = ttk.Combobox(setup_frame, width=20, values=master.sys._supported_models[device_type])
+            self.model_combo = ttk.Combobox(setup_frame, values=master.sys._supported_models[device_type])
             self.model_combo.grid(row=r, column=0); r+=1
             self.model_combo.set(master.sys._default_model[device_type])
             ttk.Label(setup_frame, text='Identity:').grid(row=r, column=0); r+=1
@@ -1399,7 +1399,6 @@ class TargetFrame(ttk.Frame):
             ErrorPopup(self, err, self._logger)
             
     def go_to_target_callback(self):
-        print('Go To Target')
         self._logger.debug('MountControlFrame Go to target clicked')
         assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
         try:

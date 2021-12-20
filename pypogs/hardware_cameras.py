@@ -127,6 +127,7 @@ class Camera:
         self._ptgrey_camlist = None
         self._ptgrey_system = None
         #Only used for ascom
+        self._ascom_driver_handler = None
         self._ascom_camera = None
         self._exposure_sec = 0.1
         #Callbacks on image event
@@ -211,6 +212,7 @@ class Camera:
                     self._ascom_camera.AbortExposure()
                 self._ascom_camera.Connected = False
             self._log_debug('ASCOM camera disconnected')
+            self._ascom_pythoncom.CoUninitialize()
             del(self._ascom_camera)
         self._log_debug('ASCOM camera hardware released')
 
@@ -316,7 +318,7 @@ class Camera:
             self._log_debug('Checking ASCOM camera identity and availability')
             assert identity is not None, 'ASCOM camera identity not resolved'
             if not identity.startswith('ASCOM'):
-                identity = 'ASCOM.'+identity+'.camera'
+                identity = 'ASCOM.'+identity+'.Camera'
             #self._log_debug('Loading ASCOM camera driver: '+str(identity))
             #try:
             #    ascom_camera = self._ascom_driver_handler.Dispatch(identity)
@@ -431,7 +433,9 @@ class Camera:
             if self._ascom_camera is not None:
                 raise RuntimeError('There is already an ASCOM camera object here')
             self._log_debug('Attempting to connect to ASCOM device "'+str(self.identity)+'"')
-            if not hasattr(self, '_ascom_driver_handler'):
+            if self._ascom_driver_handler is None:
+                import pythoncom
+                self._ascom_pythoncom = pythoncom
                 import win32com.client
                 self._ascom_driver_handler = win32com.client
             camDriverName = str()
@@ -440,7 +444,7 @@ class Camera:
                 if self.identity.startswith('ASCOM'):
                     camDriverName = self.identity
                 else:
-                    camDriverName = 'ASCOM.'+str(self.identity)+'.camera'
+                    camDriverName = 'ASCOM.'+str(self.identity)+'.Camera'
             else:
                 ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
                 ascomSelector.DeviceType = 'Camera'
@@ -449,13 +453,14 @@ class Camera:
                 if not camDriverName:            
                     self._log_debug('User canceled camera selection')
             assert camDriverName, 'Unable to identify ASCOM camera.'
+            self._identity = camDriverName.replace('ASCOM.','').replace('.Camera','')
             self._log_debug('Loading ASCOM camera driver: '+camDriverName)
+            self._ascom_pythoncom.CoInitialize()
             self._ascom_camera = self._ascom_driver_handler.Dispatch(camDriverName)
             assert hasattr(self._ascom_camera, 'Connected'), "Unable to access camera driver"
             self._log_debug('Connecting to camera')
             self._ascom_camera.Connected = True
             assert self._ascom_camera.Connected, "Failed to connect to camera"
-            #self.identity = camDriverName
             assert self._ascom_camera is not None, 'ASCOM camera not initialized'
             
             class AscomCameraImagingLoopHandler():

@@ -126,6 +126,7 @@ class Mount:
         self._azi_limit = (None, None) #limit degees
         self._home_pos = (0, 0) #Home position
         self._alt_zero = 0 #Amount to subtract from alt.
+        self._is_sidereal_tracking = False
         self._axis_directions = axis_directions or (1, 1)  #set to 1 to use mount default axis direction, -1 to invert direction
         # Only used for model celestron
         self._cel_serial_port = None
@@ -135,6 +136,8 @@ class Mount:
         self._ascom_scope_azi_axis = 0
         self._ascom_availableRatesAlt = [0]
         self._ascom_availableRatesAzi = [0]
+        self._ascom_pythoncom = None
+        self._ascom_driver_handler = None
         # Thread for rate control
         self._control_thread = None
         self._control_thread_stop = True
@@ -148,7 +151,6 @@ class Mount:
             self.identity = identity
         if model is not None:
             self.initialize()
-        self._is_sidereal_tracking = False
         # Try to get Python to clean up the object properly
         import atexit, weakref
         atexit.register(weakref.ref(self.__del__))
@@ -228,9 +230,9 @@ class Mount:
         self._logger.debug('Setting model to: '+str(model))
         assert not self.is_init, 'Can not change already intialised device model'
         model = str(model)
-        assert model.lower() in self._supported_models,\
+        assert model in self._supported_models,\
                                                 'Model type not recognised, allowed: '+str(self._supported_models)
-        self._model = model.lower()
+        self._model = model
         self._logger.debug('Model set to '+str(self.model))
 
     @property
@@ -250,9 +252,10 @@ class Mount:
         return self._identity
     @identity.setter
     def identity(self, identity):
-        self._logger.debug('Setting identity to: '+str(identity))
+        self._logger.debug('Mount identity setter called with "'+str(identity)+'"')    
         assert not self.is_init, 'Can not change already intialised device'
         assert self.model is not None, 'Must define model first'
+        self._logger.debug('Setting identity to: '+str(identity))
         if self.model == 'celestron':
             assert isinstance(identity, (str, int)), 'Identity must be a string or an int'
             if isinstance(identity, int):
@@ -277,10 +280,12 @@ class Mount:
                 self._logger.debug('Failed to open port', exc_info=True)
                 raise AssertionError('Failed to open the serial port named: '+str(identity))
             self._identity = identity
-        elif self.model.lower() == 'ascom':
+        elif self.model == 'ascom':
             self._logger.debug('Attempting to connect to ASCOM device "'+str(identity)+'"')
-            if not hasattr(self, '_ascom_driver_handler'):
+            if self._ascom_driver_handler is None:
                 self._logger.debug('Loading ASCOM win32com device handler')
+                import pythoncom
+                self._ascom_pythoncom = pythoncom
                 import win32com.client
                 self._ascom_driver_handler = win32com.client
             ascomDriverName = str()
@@ -289,7 +294,7 @@ class Mount:
                 if identity.startswith('ASCOM'):
                     ascomDriverName = identity
                 else:
-                    ascomDriverName = 'ASCOM.'+str(identity)+'.telescope'
+                    ascomDriverName = 'ASCOM.'+str(identity)+'.Telescope'
             else:
                 ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
                 ascomSelector.DeviceType = 'Telescope'
@@ -298,14 +303,19 @@ class Mount:
                 if not ascomDriverName:            
                     self._logger.debug('User canceled telescope selection')
                     return False
+                try:
+                    identity = ascomDriverName.replace('ASCOM.','').replace('.Telescope','')
+                except:
+                    identity = None
             if not ascomDriverName:
                 raise AssertionError('Failed to identify ASCOM telescope')
-            try:
-                self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
-                self._ascom_telescope = None
-            except:
-                raise AssertionError('Failed to connect to ASCOM telescope: '+str(ascomDriverName))
-            self._identity = ascomDriverName
+            #try:
+            self._ascom_pythoncom.CoInitialize()
+            self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
+            self._ascom_telescope = None
+            #except:
+            #    raise AssertionError('Failed to connect to ASCOM telescope: '+str(ascomDriverName))
+            self._identity = identity
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -317,7 +327,7 @@ class Mount:
         if not self.model: return False
         if self.model == 'celestron':
             return self._is_init
-        elif self.model.lower() == 'ascom':
+        elif self.model == 'ascom':
             return self._is_init
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -328,9 +338,9 @@ class Mount:
         """tuple of str: Get all the available properties (settings) supported by this device."""
         if not self.is_init:
             return None
-        elif self.model.lower() == 'celestron':
+        elif self.model == 'celestron':
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
-        elif self.model.lower() == 'ascom':
+        elif self.model == 'ascom':
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit', 'axis_directions')
         else:
             self._log_warning('Forbidden model string defined.')
@@ -476,19 +486,21 @@ class Mount:
             self._logger.debug('Ensure sidereal tracking is off.')
             self._cel_tracking_off()
             self._is_init = True
-        elif self.model.lower() == "ascom":
+        elif self.model == "ascom":
             if self._ascom_telescope is not None:
                 raise RuntimeError('There is already an ASCOM telescope object here')
             self._logger.debug('Attempting to connect to ASCOM device "'+str(self.identity)+'"')
-            if not hasattr(self, '_ascom_driver_handler'):
+            if self._ascom_driver_handler is None:
+                import pythoncom
+                self._ascom_pythoncom = pythoncom
                 import win32com.client
-                self._ascom_driver_handler = win32com.client 
+                self._ascom_driver_handler = win32com.client
             if self.identity is not None:
                 self._logger.debug('Specified identity: "'+str(self.identity)+'" ['+str(len(self.identity))+']')
                 if self.identity.startswith('ASCOM'):
                     ascomDriverName = self.identity
                 else:
-                    ascomDriverName = 'ASCOM.'+str(self.identity)+'.telescope'
+                    ascomDriverName = 'ASCOM.'+str(self.identity)+'.Telescope'
             else:
                 ascomSelector = self._ascom_driver_handler.Dispatch("ASCOM.Utilities.Chooser")
                 ascomSelector.DeviceType = 'Telescope'
@@ -497,8 +509,11 @@ class Mount:
                 if not ascomDriverName:            
                     self._logger.debug('User canceled telescope selection')
                     return False
+            self._identity = ascomDriverName.replace('ASCOM.','').replace('.Telescope','')
             assert ascomDriverName, 'Unable to identify ASCOM telescope.'
+            assert self._ascom_driver_handler is not None, 'Unable to access win32com driver handler'
             self._logger.debug('Loading ASCOM telescope driver: '+ascomDriverName)
+            self._ascom_pythoncom.CoInitialize()
             self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
             assert self._ascom_telescope is not None, 'Failed to intialize ASCOM telescope'
             assert hasattr(self._ascom_telescope, 'Connected'), "Unable to access telescope driver"
@@ -553,12 +568,14 @@ class Mount:
             self._cel_serial_port = None
             self._is_init = False
             self._logger.info('Mount deinitialised')
-        elif self.model.lower() == "ascom":
+        elif self.model == "ascom":
             self._logger.debug('Disconnecting ASCOM telescope mount')
             self._ascom_telescope.AbortSlew()
             self._ascom_telescope.Connected = False
-            self._ascom_telescope = None
             self._is_init = False
+            if self._ascom_pythoncom is not None:
+              self._ascom_pythoncom.CoUninitialize()
+            del(self._ascom_telescope)
             self._logger.info('Mount deinitialised')
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -584,7 +601,7 @@ class Mount:
             moving = not ret[0] == b'0'
             self._logger.debug('Mount returned: ' + str(ret[0]) + ', is moving: ' + str(moving))
             return moving
-        elif self.model.lower() == "ascom":
+        elif self.model == "ascom":
             return self._ascom_telescope.Slewing or self._ascom_telescope.Tracking
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -609,7 +626,7 @@ class Mount:
                            + ' rate_control=' + str(rate_control))
         self._logger.debug('Stopping mount first')
         self.stop()
-        if self.model == 'celestron' or self.model.lower() == "ascom":
+        if self.model == 'celestron' or self.model == "ascom":
             self._logger.debug('Adjusting range to -180 to 180')
             alt = self.degrees_to_n180_180(alt - self._alt_zero)
             alt = self.degrees_to_n180_180(alt)
@@ -682,7 +699,7 @@ class Mount:
             else:
                 self._logger.debug('Mount acknowledged')
                 return False
-        elif self.model.lower() == "ascom":
+        elif self.model == "ascom":
             if not self._ascom_telescope.CanSlewAltAz:
                 raise RuntimeError('ASCOM mount does not support alt/az go-to commanding')
                 return False
@@ -726,7 +743,7 @@ class Mount:
             self._state_cache['alt'] = alt
             self._state_cache['azi'] = azi
             return (alt, azi)
-        elif self.model.lower() == "ascom":
+        elif self.model == "ascom":
             alt = self._ascom_telescope.Altitude
             azi = self._ascom_telescope.Azimuth
             self._logger.debug('Mount position: alt=' + str(alt) + ' azi=' + str(azi))
@@ -793,7 +810,7 @@ class Mount:
             self._state_cache['alt_rate'] = alt
             self._state_cache['azi_rate'] = azi
             
-        elif self.model.lower() == "ascom":
+        elif self.model == "ascom":
             requested_rates = [0, 0]
             requested_rates[self._ascom_scope_alt_axis] = alt
             requested_rates[self._ascom_scope_azi_axis] = azi
@@ -858,7 +875,7 @@ class Mount:
             self._logger.debug('Sending zero rate command')
             self.set_rate_alt_az(0, 0)
             self.stop_sidereal_tracking()
-            if self.model.lower() == "ascom":
+            if self.model == "ascom":
                 if self._ascom_telescope.Slewing:
                     self._ascom_telescope.AbortSlew()        
         self._logger.debug('Stopped mount')
