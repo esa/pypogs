@@ -30,9 +30,7 @@ import logging
 from time import sleep, time as timestamp
 from datetime import datetime
 from threading import Thread, Event
-import pythoncom
 from struct import pack as pack_data
-from enum import Enum
 
 # External imports:
 import numpy as np
@@ -91,7 +89,6 @@ class Mount:
     _supported_models = ('Celestron','ASCOM','iOptron AZMP')
     _default_model = 'ASCOM'
 
-
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, axis_directions=None):
         """Create Mount instance. See class documentation."""
         # Logger setup
@@ -122,8 +119,8 @@ class Mount:
                            + str(name) + ' auto_init=' + str(auto_init))
                            
         self._serial_baud_rate = {
-            'Celestron':    9600,
-            'iOptron AZMP': 115200,
+          'Celestron':    9600,
+          'iOptron AZMP': 115200,
         }
         self._serial_is_init = False
         self._model = None
@@ -139,26 +136,13 @@ class Mount:
         self._axis_directions = axis_directions or (1, 1)  #set to 1 to use mount default axis direction, -1 to invert direction
         # Only used for model Celestron
         self._serial_port = None
-        # Only used for model iOptron AZMP
-        self._azmp_command_modes = {b'5035': 'normal', b'9035': 'special'}
-        self._azmp_status = {
-            '0': 'stopped at non-zero pos', 
-            '1': 'tracking with PEC disabled',
-            '2': 'slewing',
-            '3': 'autoguiding',
-            '4': 'meridian flipping',
-            '5': 'tracking with PEC enabled',
-            '6': 'parked',
-            '7': 'stopped at zero pos'
-        }
-        self._azmp_command_mode_names = self._azmp_command_modes.values()
-        self._azmp_command_mode_code = b''
         # Only used for model ASCOM
         self._ascom_telescope = None
         self._ascom_scope_alt_axis = 1
         self._ascom_scope_azi_axis = 0
         self._ascom_availableRatesAlt = [0]
         self._ascom_availableRatesAzi = [0]
+        self._ascom_pythoncom = None
         self._ascom_driver_handler = None
         # Thread for rate control
         self._control_thread = None
@@ -279,25 +263,29 @@ class Mount:
         assert self.model is not None, 'Must define model first'
                 
         if self.model == 'Celestron':
+            serial_port_name = self._serial_find_port(identity)
             self._logger.debug('Using %s with string identity, try to open and check model' % self.model)
-            serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
-            r = self._serial_test(serial_port_name, test_command='m', nbytes=2)
+            r = self._serial_test(serial_port_name, test_command='m', eol_char='#')
             assert len(r)==2 and r[1] == ord('#'), 'Did not get the expected response from the device'
-            self._logger.debug('Setting identity to: '+serial_port_name)
+            self._logger.debug('Setting identity to: '+str(serial_port_name))
             self._identity = serial_port_name
             
         if self.model == 'iOptron AZMP':
+            serial_port_name = self._serial_find_port(identity)
             self._logger.debug('Using %s with string identity, try to open and check model' % self.model)
-            serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
-            r = self._serial_test(serial_port_name, test_command=':MountInfo#', nbytes=4)
-            assert len(r)==4 and r == b'5035' or r == b'9035', 'Did not get the expected response from the device'
-            self._logger.debug('Setting identity to: '+serial_port_name)
+            r = self._serial_test(serial_port_name, test_command=':MountInfo#', eol_char='#')
+            print('MountInfo response: "%s"' % str(r))
+            # expect 5035 for AZMP in regular operating mode, or 9035 for AZMP in special mode
+            assert len(r)==5 and r[4] == ord('#'), 'Did not get the expected response from the device ("%s")' % str(r)
+            self._logger.debug('Setting identity to: '+str(serial_port_name))
             self._identity = serial_port_name
             
         elif self.model == 'ASCOM':
             self._logger.debug('Attempting to connect to ASCOM device "'+str(identity)+'"')
             if self._ascom_driver_handler is None:
                 self._logger.debug('Loading ASCOM win32com device handler')
+                import pythoncom
+                self._ascom_pythoncom = pythoncom
                 import win32com.client
                 self._ascom_driver_handler = win32com.client
             ascomDriverName = str()
@@ -322,6 +310,7 @@ class Mount:
             if not ascomDriverName:
                 raise AssertionError('Failed to identify ASCOM telescope')
             #try:
+            self._ascom_pythoncom.CoInitialize()
             self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
             self._ascom_telescope = None
             #except:
@@ -465,15 +454,11 @@ class Mount:
                 tracking_mode = self._serial_query('t', '#')
                 self._is_sidereal_tracking = (tracking_mode is not None and tracking_mode[0] == '1')
             elif self.model == 'iOptron AZMP':
-                # Sidereal tracking (and state query) is only available in normal commanding mode.
-                if self._azmp_command_mode == 'normal':
-                    mount_info = self._serial_query(':GLS#', '#').decode('ASCII')
-                    # The 18th digit indicates system status: 1 = tracking with PEC disabled, 5 means tracking with PEC enabled
-                    status = mount_info[14]
-                    self._logger.debug('Mount tracking state: "%s"' % status)
-                    self._is_sidereal_tracking = (status == '1' or status == '5')
-                else:
-                    self._is_sidereal_tracking = False
+                mount_info = self._serial_query(':GLS#', '#')
+                # The 18th digit indicates system status: 1 = tracking with PEC disabled, 5 means tracking with PEC enabled
+                status = mount_info[17]
+                self._logger.debug('Mount trackign state: "%s"' % status)
+                self._is_sidereal_tracking = (status == '1' or status == '5')
             elif self.model == 'ASCOM':
                 self._is_sidereal_tracking = (self._ascom_telescope is not None and self._ascom_telescope.Tracking)
         return self._is_sidereal_tracking        
@@ -495,38 +480,36 @@ class Mount:
         #assert not None in (self.model, self.identity), 'Must define model and identity before initialising'
         assert not None in (self.model, ), 'Must define model before initialising'
         if self.model == 'Celestron':
-            assert self.identity is not None, 'Must define identity before initialising'
+            assert not None in (self.identity), 'Must define identity before initialising'
             self._logger.debug('Using Celestron, try to initialise')
-            self._logger.debug('Opening serial port '+self.identity)
-            self._serial_port_open(self.identity)
+            self._logger.debug('Opening serial port '+self.identify)
+            self._serial_open_port(self.identity)
             self._logger.debug('Sending model check')
             self._serial_send_bytes_command(b'm')
-            r = self._serial_read_bytes(2, timeout=0.5)
+            r = self._serial_read_bytes(2)
             assert len(r)==2 and r[1] == ord('#'), 'Did not get the expected response during initialisation'
             self._logger.debug('Ensure sidereal tracking is off.')
             self.stop_sidereal_tracking()
             self._is_init = True
         if self.model == 'iOptron AZMP':
-            assert self.identity is not None, 'Must define identity before initialising'
+            assert not None in (self.identity), 'Must define identity before initialising'
             self._logger.debug('Using %s, try to initialise' % self.model)
-            self._logger.debug('Opening serial port '+self.identity)
-            self._serial_port_open(self.identity)
-            self._logger.debug('Sending mode check')
-            # Command mode persists across resets. Expect either mode initially, and try to get to special mode.
-            self._azmp_check_command_mode()
-            assert self._azmp_command_mode in self._azmp_command_mode_names, 'Failed to get initial mount commanding mode.'
-            self._logger.debug('Initial command mode: %s' % self._azmp_command_mode)
-            if self._azmp_command_mode == 'normal':
-                self._logger.debug('Ensure sidereal tracking is off.')
-                self.stop_sidereal_tracking()
-                self._azmp_change_mode('special')
-                assert self._azmp_command_mode == 'special', 'Unable to switch mount to special command mode.'
+            self._logger.debug('Opening serial port '+self.identify)
+            self._serial_open_port(self.identity)
+            self._logger.debug('Sending model check')
+            self._serial_send_text_command(':MountInfo#')
+            r = self._serial_read_bytes(4)
+            assert r == '5035' or r == '9035', 'Did not get the expected response during initialisation'
+            self._logger.debug('Ensure sidereal tracking is off.')
+            self.stop_sidereal_tracking()
             self._is_init = True
         elif self.model == 'ASCOM':
             if self._ascom_telescope is not None:
                 raise RuntimeError('There is already an ASCOM telescope object here')
             self._logger.debug('Attempting to connect to ASCOM device "'+str(self.identity)+'"')
             if self._ascom_driver_handler is None:
+                import pythoncom
+                self._ascom_pythoncom = pythoncom
                 import win32com.client
                 self._ascom_driver_handler = win32com.client
             if self.identity is not None:
@@ -547,6 +530,7 @@ class Mount:
             assert ascomDriverName, 'Unable to identify ASCOM telescope.'
             assert self._ascom_driver_handler is not None, 'Unable to access win32com driver handler'
             self._logger.debug('Loading ASCOM telescope driver: '+ascomDriverName)
+            self._ascom_pythoncom.CoInitialize()
             self._ascom_telescope = self._ascom_driver_handler.Dispatch(ascomDriverName)
             assert self._ascom_telescope is not None, 'Failed to intialize ASCOM telescope'
             assert hasattr(self._ascom_telescope, 'Connected'), "Unable to access telescope driver"
@@ -601,11 +585,8 @@ class Mount:
             self._is_init = False
             self._logger.info('Mount deinitialised')
         if self.model == 'iOptron AZMP':
-            if self._serial_is_init:
-                self._logger.debug('Reverting mount commanding mode to normal')
-                self._azmp_change_mode('normal')
-                self._logger.debug('Closing and deleting serial port')
-                self._serial_port_close()
+            self._logger.debug('Using %s, closing and deleting serial port' % self.model)
+            self._serial_port_close()
             self._is_init = False
             self._logger.info('Mount deinitialised')
         elif self.model == 'ASCOM':
@@ -613,7 +594,8 @@ class Mount:
             self._ascom_telescope.AbortSlew()
             self._ascom_telescope.Connected = False
             self._is_init = False
-            pythoncom.CoUninitialize()
+            if self._ascom_pythoncom is not None:
+              self._ascom_pythoncom.CoUninitialize()
             del(self._ascom_telescope)
             self._logger.info('Mount deinitialised')
         else:
@@ -641,19 +623,18 @@ class Mount:
             self._logger.debug('Mount returned: ' + str(ret[0]) + ', is moving: ' + str(moving))
             return moving
         if self.model == 'iOptron AZMP':
+            self._logger.debug('Using %s, asking if moving' % self.model)
             is_moving = False
-            self._logger.debug('Using %s in %s command mode, asking if moving' % (self.model, self._azmp_command_mode))
-            if self._azmp_command_mode == 'special':
-                azi_axis_rate = self._serial_query(':Q0#', eol_char='#').decode('ASCII')
-                alt_axis_rate = self._serial_query(':Q1#', eol_char='#').decode('ASCII')
-                #self._logger.debug('azi_axis_rate: "%s", alt_axis_rate: "%s"' % (azi_axis_rate, alt_axis_rate))
+            def _is_moving_to(is_moving):
+                self._serial_send_text_command(self._serial_port,'L')
+                azi_axis_rate = self._serial_query(':Q0#', eol_char='#').replace('#','')
+                alt_axis_rate = self._serial_query(':Q1#', eol_char='#').replace('#','')
+                print('azi_axis_rate: "%s", alt_axis_rate: "%s"' % (azi_axis_rate, alt_axis_rate))
                 is_moving = (int(azi_axis_rate) != 0 or int(azi_axis_rate) != 0)
-            elif self._azmp_command_mode == 'normal':
-                mount_state = self._serial_query(':GLS#', eol_char='#').decode('ASCII')
-                mount_system_status_byte = mount_state[14]
-                mount_system_state = self._azmp_status[mount_system_status_byte]
-                self._logger.debug('AZMP system state: "%s"' % mount_system_state)
-                is_moving = mount_system_status_byte in '12345'
+            t = Thread(target=_is_moving_to, args=(is_moving,))
+            t.start()
+            t.join()
+            self._logger.debug('Mount returned: '+str(is_moving))
             return is_moving
         elif self.model == 'ASCOM':
             return self._ascom_telescope.Slewing or self._ascom_telescope.Tracking
@@ -680,22 +661,18 @@ class Mount:
                            + ' rate_control=' + str(rate_control))
         self._logger.debug('Stopping mount first')
         self.stop()
-        if self.model == 'Celestron' or self.model == 'ASCOM' or self.model == 'iOptron AZMP':
+        if self.model == 'Celestron' or self.model == 'ASCOM':
             self._logger.debug('Adjusting range to -180 to 180')
             alt = self.degrees_to_n180_180(alt - self._alt_zero)
             alt = self.degrees_to_n180_180(alt)
             azi = self.degrees_to_n180_180(azi)
-        if self.model == 'iOptron AZMP':
-            self._azmp_change_mode('special')
-        self._logger.debug('Will command to alt=' + str(alt) + ' azi=' + str(azi))
+        self._logger.debug('Will command: alt=' + str(alt) + ' azi=' + str(azi))
         if rate_control: #Use own control thread
             self._logger.debug('Starting rate controller')
-            tolerance_deg = 0.05
             Kp = 0.25
             self._control_thread_stop = False
             success = [False]
             def _loop_slew_to(alt, azi, success):
-                if self.model == 'ASCOM':  pythoncom.CoInitialize()
                 while not self._control_thread_stop:
                     curr_pos = self.get_alt_az()
                     eAlt = Kp * self.degrees_to_n180_180(alt - curr_pos[0])
@@ -705,14 +682,13 @@ class Mount:
                     if eAzi < -self._max_speed[1]: eAzi = -self._max_speed[1]
                     if eAzi >  self._max_speed[1]: eAzi =  self._max_speed[1]
 
-                    if abs(eAlt)<tolerance_deg*Kp and abs(eAzi)<tolerance_deg*Kp:
-                        self._logger.debug('Reached goal alt/azi position within tolerance (%i deg)' % tolerance_deg)
+                    if abs(eAlt)<1.0 and abs(eAzi)<1.0:
                         self.set_rate_alt_az(0, 0)
                         success[0] = True
                         break
                     else:
                         self.set_rate_alt_az(eAlt, eAzi)
-                    sleep(0.005)
+                    sleep(0.001)
                 self._logger.debug('exiting rate control loop')
                 self._control_thread_stop = True
             self._control_thread = Thread(target=_loop_slew_to, args=(alt, azi, success))
@@ -725,7 +701,6 @@ class Mount:
             self._logger.debug('Sending move command to mount')
             success = [False]
             def _move_to_alt_az(alt, azi, success):
-                if self.model == 'ASCOM':  pythoncom.CoInitialize()
                 success[0] = command_to_alt_az(alt, azi)
             t = Thread(target=_move_to_alt_az, args=(alt, azi, success))
             t.start()
@@ -743,7 +718,6 @@ class Mount:
             alt (float): Altitude (degrees).
             azi (float): Azimuth (degrees).
         """
-        self._logger.debug('Got request to command to alt: %0.3f, azi: %0.3f' % (alt, azi))
         assert self.is_init, 'Must be initialised'
         if self.model == 'Celestron':
             #azi = azi %360 #Mount uses 0-360
@@ -758,28 +732,8 @@ class Mount:
                 self._logger.debug('Mount acknowledged')
                 return True
             else:
-                self._logger.debug('Mount did not acknowledge')
-                return False
-        elif self.model == 'iOptron AZMP':
-            # TODO check alt zero correct
-            self._azmp_change_mode('special')
-            # Azimuth:
-            command = 'T0%+i#' % int(self.degrees_to_0_360(azi) * 3600 / 0.01 )
-            self._serial_send_text_command(command)
-            if self._serial_check_ack('1'):
                 self._logger.debug('Mount acknowledged')
-            else:
-                self._logger.debug('Mount did not acknowledge')
                 return False
-            # Altitude:
-            command = 'T1%+i#' % int(self.degrees_to_0_360(alt - self._alt_zero) * 3600 / 0.01 )
-            self._serial_send_text_command(command)
-            if self._serial_check_ack('1'):
-                self._logger.debug('Mount acknowledged')
-            else:
-                self._logger.debug('Mount did not acknowledge')
-                return False
-            return True
         elif self.model == 'ASCOM':
             if not self._ascom_telescope.CanSlewAltAz:
                 raise RuntimeError('ASCOM mount does not support alt/az go-to commanding')
@@ -807,8 +761,9 @@ class Mount:
             #self._logger.debug('Using Celestron, requesting mount position')
             def _get_alt_az(ret):
                 command = bytes([ord('z')]) #Get precise AZM-ALT
+                self._serial_port.write(command)
                 # The command returns ASCII encoded text of HEX values!
-                response = self._serial_query(command, '#').decode('ASCII')
+                res = self._serial_read_to_eol('#').decode('ASCII')
                 r2 = res.split(',')
                 ret[0] = int(r2[1], 16)
                 ret[1] = int(r2[0], 16)
@@ -820,29 +775,6 @@ class Mount:
             azi = self.degrees_to_n180_180( float(ret[1]) / 2**32 * 360 )
             self._logger.debug('Mount position: alt=' + str(ret[0]) + ' azi=' + str(ret[1]) \
                                + ' => alt=' + str(alt) + ' azi=' + str(azi))
-            self._state_cache['alt'] = alt
-            self._state_cache['azi'] = azi
-            return (alt, azi)
-        elif self.model == 'iOptron AZMP':
-            if self._azmp_command_mode == 'special':
-                # returns integer units of 0.01 arcsec
-                azi_raw = self._serial_query(':P0#', '#').decode('ASCII')
-                alt_raw = self._serial_query(':P1#', '#').decode('ASCII')
-                assert azi_raw is not None and alt_raw is not None, 'Failed to get mount position.'
-                azi = self.degrees_to_n180_180( int(azi_raw) * 0.01 / 3600 + 180 )
-                alt = self.degrees_to_n180_180( 90 - int(alt_raw) * 0.01 / 3600 + self._alt_zero)
-                self._logger.debug('Mount position: alt=' + str(alt_raw) + ' azi=' + str(azi_raw) \
-                                    + ' => alt=' + str(alt) + ' azi=' + str(azi))
-            elif self._azmp_command_mode == 'normal':
-                # returns char array: : “sTTTTTTTTTTTTTTTTT#”
-                mount_altaz_info = self._serial_query(':GAC#', '#').decode('ASCII')
-                assert mount_altaz_info is not None, 'Failed to get mount position.'
-                alt_raw = int(mount_altaz_info[0:9])
-                azi_raw = int(mount_altaz_info[9:18])
-                azi = self.degrees_to_n180_180( int(azi_raw) * 0.01 / 3600 )
-                alt = self.degrees_to_n180_180( int(alt_raw) * 0.01 / 3600 + self._alt_zero)
-                self._logger.debug('Mount position: alt=' + str(alt_raw) + ' azi=' + str(azi_raw) \
-                                    + ' => alt=' + str(alt) + ' azi=' + str(azi))
             self._state_cache['alt'] = alt
             self._state_cache['azi'] = azi
             return (alt, azi)
@@ -912,21 +844,7 @@ class Mount:
             self._logger.debug('Send successful')
             self._state_cache['alt_rate'] = alt
             self._state_cache['azi_rate'] = azi
-        if self.model == 'iOptron AZMP':
-            #self._logger.debug('Using %s, sending rate command to mount' % self.model)
-            if self._azmp_command_mode != 'special':
-                self._azmp_change_mode('special')
-            assert self._azmp_command_mode == 'special', 'AZMP mount must be in "special" command mode to command per-axis rates.'
-            # convert rates to integer units of 0.01 arcsec/second
-            alt_rate_command = ':M1%+i#' % int(round(-1*alt*3600/0.01))
-            azi_rate_command = ':M0%+i#' % int(round(azi*3600/0.01))
-            self._serial_send_text_command(alt_rate_command)
-            assert self._serial_check_ack('1'), 'Mount did not acknowledge rate command (%s)' % alt_rate_command
-            self._serial_send_text_command(azi_rate_command)
-            assert self._serial_check_ack('1'), 'Mount did not acknowledge rate command (%s)' % azi_rate_command
-            self._logger.debug('Send successful')
-            self._state_cache['alt_rate'] = alt
-            self._state_cache['azi_rate'] = azi
+            
         elif self.model == 'ASCOM':
             requested_rates = [0, 0]
             requested_rates[self._ascom_scope_alt_axis] = alt
@@ -975,12 +893,17 @@ class Mount:
             assert success[0], 'Failed communicating with mount'   
             self._is_sidereal_tracking = True
         elif self.model == 'iOptron AZMP':
-            # sidereal tracking (and state check) is only supported in normal commanding mode.
-            self._azmp_change_mode('normal')
-            if self._azmp_command_mode == 'normal':
+            success = [False]
+            def _set_tracking_off(success):
                 self._serial_send_text_command(':ST1#')
-                assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
+                assert self._serial_check_ack('#'), 'Mount did not acknowledge!'
+                success[0] = True
                 self._is_sidereal_tracking = False
+            t = Thread(target=_set_tracking_off, args=(success,))
+            t.start()
+            t.join()
+            assert success[0], 'Failed communicating with mount'
+            self._is_sidereal_tracking = False
         elif self.model == 'ASCOM':
             if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
                 try:
@@ -1008,17 +931,17 @@ class Mount:
                 t.join()
                 assert success[0], 'Failed communicating with mount'
             elif self.model == 'iOptron AZMP':
-                # sidereal tracking (and state check) is only supported in normal commanding mode.
-                self._azmp_check_command_mode()
-                if self._azmp_command_mode == 'normal':
+                success = [False]
+                def _set_tracking_off(success):
                     self._serial_send_text_command(':ST0#')
-                    assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
+                    assert self._serial_check_ack('#'), 'Mount did not acknowledge!'
+                    success[0] = True
                     self._is_sidereal_tracking = False
-                    self._azmp_change_mode('special')
-                    assert self._azmp_command_mode == 'special', 'Unable to switch mount to special command mode.'
-                    self.get_alt_az()
-                else:
-                    self._is_sidereal_tracking = False
+                t = Thread(target=_set_tracking_off, args=(success,))
+                t.start()
+                t.join()
+                assert success[0], 'Failed communicating with mount'
+                self._is_sidereal_tracking = False
             elif self.model == 'ASCOM':
                 if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
                     try:
@@ -1088,33 +1011,14 @@ class Mount:
         """float: Convert angle (degrees) to range (-180, 180]"""
         return 180 - (180-float(number))%360
 
-
-    def _azmp_check_command_mode(self):
-        self._logger.debug('Checking AZMP command mode')
-        assert self._serial_is_init, 'Serial port is not initialized'
-        # first try:
-        self._serial_send_text_command(':MountInfo#')
-        self._azmp_command_mode_code = self._serial_read_bytes(4)
-        if not self._azmp_command_mode_code:
-            # second try:
-            self._serial_send_text_command(':MountInfo#')
-            self._azmp_command_mode_code = self._serial_read_bytes(4, timeout=0.3)        
-        assert self._azmp_command_mode_code in self._azmp_command_modes, 'Failed to get command mode from mount (%s)' % str(self._azmp_command_mode_code)
-        self._azmp_command_mode = self._azmp_command_modes.get(self._azmp_command_mode_code, 'unavailable')
-        self._logger.debug('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
-        print('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
-
-    def _azmp_change_mode(self, to_mode):
-        self._logger.debug('Got request to transition mount to %s commanding mode' % to_mode)
-        self._azmp_check_command_mode()
-        if self._azmp_command_mode == to_mode:
-            self._logger.debug('Mout is already in command mode "%s"' % self._azmp_command_mode)
-            return
-        self._logger.debug('Commanding AZMP mode transition')
-        self._serial_send_text_command(':ZZZ#')
-        sleep(0.5)
-        self._azmp_check_command_mode()
-        assert self._azmp_command_mode == to_mode, 'Failed to transition mount to %s commanding mode"' % to_mode
+    def _ascom_tracking_off(self):
+        """PRIVATE: Disable sidereal tracking on ASCOM mount."""
+        if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
+            try:
+                self._ascom_telescope.Tracking = False  #turn off tracking
+                self._is_sidereal_tracking = False
+            except:
+                self._logger.warning('Failed to stop sidereal tracking.')  
 
     def _serial_find_port(self, port_name):
         assert isinstance(port_name, (str, int)), 'Identity must be a string or an int'
@@ -1129,17 +1033,17 @@ class Mount:
                 raise AssertionError('No serial port for index: '+str(identity))
         #else?
 
-    def _serial_test(self, port_name, test_command, nbytes):
-        self._logger.debug('Testing serial port "%s" with test command "%s", reading %i bytes' % (port_name, test_command, nbytes))
+    def _serial_test(self, port_name, test_command, eol_char):
+        self._logger.debug('Testing serial port "%s" with test command "%s" and eol char "%s"' % (port_name, test_command, eol_char))
         response = ''
         try:
             baud = self._serial_baud_rate[self.model] or 9600
-            self._logger.debug('Testing serial port "%s", baud %i' % (port_name, baud))
+            print('Testing serial port "%s", baud %i' % (port_name, baud))
             with serial.Serial(port_name, baud, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,\
                                timeout=3.5, write_timeout=3.5) as ser:
                 ser.write(test_command.encode('ASCII'))
                 ser.flush()
-                response = ser.read(nbytes)
+                response = self._serial_read_to_eol(eol_char, serial_port=ser)
                 self._logger.debug('Got response: '+str(response))
         except serial.SerialException:
             print(serial.SerialException)
@@ -1147,7 +1051,7 @@ class Mount:
             raise AssertionError('Failed to open the serial port named: '+str(port_name))
         return response
         
-    def _serial_port_open(self, port_name):
+    def _serial_open_port(self, port_name):
         try:
             baud = self._serial_baud_rate[self.model] or 9600
             self._serial_port = serial.Serial(port_name, baud, parity=serial.PARITY_NONE,\
@@ -1173,7 +1077,7 @@ class Mount:
         try:
             self._serial_send_text_command(command, serial_port=serial_port)
             response = self._serial_read_to_eol(eol_char, serial_port=serial_port)
-            #self._logger.debug('Mount responded: "%s"' % str(response))
+            self._logger.debug('Mount responded: "%s"' % str(response))
         except serial.SerialException:
             self._logger.debug('Serial query failed', exc_info=True)
             raise AssertionError('Serial query failed on port: '+str(self._serial_port))
@@ -1203,22 +1107,13 @@ class Mount:
         b = serial_port.read()
         return int.from_bytes(b, 'big') == ord(ack_char)
 
-    def _serial_read_bytes(self, nbytes, serial_port=None, timeout=0.1):
-        """PRIVATE: Read response to the EOL character. Return bytes."""
+    def _serial_read_bytes(self, nbytes, serial_port=None):
+      """PRIVATE: Read response to the EOL character. Return bytes."""
         # Read from mount until EOL character. Return as type 'bytes'
         serial_port = serial_port or self._serial_port
         assert serial_port is not None and self._serial_is_init, 'Serial port is not initialized'
         self._logger.debug('Reading %i bytes from serial port.' % nbytes)
-        return_bytes = b''
-        timeout_time = timestamp() + timeout
-        while not return_bytes:
-            return_bytes = serial_port.read(nbytes)
-            if timestamp() > timeout_time:
-                self._logger.debug('timed out waiting for serial data')
-                return return_bytes
-            sleep(0.002)
-        self._logger.debug('Got: "%s"' % str(return_bytes))
-        return return_bytes
+        return serial_port.read(nbytes)
 
     def _serial_read_to_eol(self, eol_char, serial_port=None):
         """PRIVATE: Read response to the EOL character. Return bytes."""
@@ -1232,7 +1127,7 @@ class Mount:
                 raise RuntimeError('No response from mount!')
             else:
                 if int.from_bytes(r, 'big') == ord(eol_char):
-                    #self._logger.debug('Read from mount: '+str(response))
+                    self._logger.debug('Read from mount: '+str(response))
                     return response
                 else:
                     response += r

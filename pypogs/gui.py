@@ -1088,7 +1088,7 @@ class HardwareFrame(ttk.Frame):
         try:
             if self.mount_popup is None:
                 self.mount_popup = self.HardwarePopup(self, 'mount', self.sys.mount, self.sys.add_mount, self.sys.clear_mount, \
-                                                      title='Mount', default_name='UnnamedMount')
+                                                      title='Mount', default_name='Mount')
             else:
                 self.mount_popup.update()
                 self.mount_popup.deiconify()
@@ -1199,10 +1199,11 @@ class HardwareFrame(ttk.Frame):
             ttk.Label(setup_frame, text='Model:').grid(row=r, column=0); r+=1
             self.model_combo = ttk.Combobox(setup_frame, values=master.sys._supported_models[device_type])
             self.model_combo.grid(row=r, column=0); r+=1
-            self.model_combo.set(master.sys._default_model[device_type])
+            self.model_combo.set(device.model if device and device.model else master.sys._default_model[device_type] or '')
             ttk.Label(setup_frame, text='Identity:').grid(row=r, column=0); r+=1
             self.identity_entry = ttk.Entry(setup_frame, width=20)
             self.identity_entry.grid(row=r, column=0); r+=1
+            self.identity_entry.insert(0, device.identity if device and device.identity else '')
             ttk.Label(setup_frame, text='Name:').grid(row=r, column=0); r+=1
             self.name_entry = ttk.Entry(setup_frame, width=20)
             self.name_entry.grid(row=r, column=0); r+=1
@@ -1220,10 +1221,10 @@ class HardwareFrame(ttk.Frame):
 
         def update(self):
             self._logger.debug('HardwarePopup got update request')
-            self.identity_entry.delete(0, 'end')
+            #self.identity_entry.delete(0, 'end')
             if self.device is None:
-                model = ''
-                identity = ''
+                #model = ''
+                #identity = ''
                 name = self.default_name
             else:
                 model = self.device.model
@@ -1232,8 +1233,8 @@ class HardwareFrame(ttk.Frame):
                 if identity is None: identity = ''
                 name = self.device.name
                 self.update_properties()
-            self.identity_entry.delete(0, tk.END)
-            self.identity_entry.insert(0, identity)
+                self.identity_entry.delete(0, tk.END)
+                self.identity_entry.insert(0, identity)
             self.name_entry.delete(0, tk.END)
             self.name_entry.insert(0, name)
             self.linked_bool.set(self.device is not None and self.device is self.link_device)
@@ -1816,14 +1817,16 @@ class MountControlFrame(ttk.Frame):
     def update(self):
         self._logger.debug('MountControlFrame got update request')
         
-        if self.sys.mount is not None and self.sys.mount.is_init and self.sys.mount.is_sidereal_tracking:
-            ttk.Style().configure('sidereal.TButton', background='green', foreground='green')
-            self.sidereal_button['text'] = 'Stop sidereal tracking'
-        else:
-            ttk.Style().configure('sidereal.TButton',\
-                                 background=ttk.Style().lookup('TButton', 'background'), \
-                                 foreground=ttk.Style().lookup('TButton', 'foreground'))
-            self.sidereal_button['text'] = 'Start sidereal tracking'
+        if self.sys.mount is not None and self.sys.mount.is_init:
+            if self.sys.mount.is_sidereal_tracking:
+                ttk.Style().configure('sidereal.TButton', background='green', foreground='green')
+                self.sidereal_button['text'] = 'Stop sidereal tracking'
+                self.sys.mount.get_alt_az()
+            else:
+                ttk.Style().configure('sidereal.TButton',\
+                                     background=ttk.Style().lookup('TButton', 'background'), \
+                                     foreground=ttk.Style().lookup('TButton', 'foreground'))
+                self.sidereal_button['text'] = 'Start sidereal tracking'
 
         if not self._update_stop:
             self.after(self._update_after, self.update)
