@@ -1638,7 +1638,7 @@ class AlignmentFrame(ttk.Frame):
         """Extends tk.Toplevel for setting location."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master.logger
+            self._logger = master._logger
             self.title('Location')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
@@ -1690,7 +1690,7 @@ class AlignmentFrame(ttk.Frame):
         """Extends tk.Toplevel for setting alignment."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master.logger
+            self._logger = master._logger
             self.title('Alignment')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
