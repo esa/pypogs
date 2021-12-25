@@ -10,36 +10,39 @@ sys.path.append('..')
 
 import pypogs
 
+class Site:
+  lat  =   34.2  # deg N
+  lon  = -118.2  # deg E
+  elev =   600   # meters above MSL
+
+
 sys = pypogs.System()
-'''
-try:
-  #sys.add_mount(model="ASCOM", identity="Simulator")
-  sys.add_mount(model="ASCOM", identity="DeviceHub")
-  sys.mount.axis_directions = (1,-1)
-except:  pass
-'''
-#sys.add_mount(model="ASCOM", identity="DeviceHub")
+
+sys.alignment.set_location_lat_lon(lat=Site.lat, lon=Site.lon, height=Site.elev)
+sys.alignment.set_alignment_enu()
+
+#sys.add_mount(model="ASCOM", identity="Simulator")
+sys.add_mount(model="ASCOM", identity="DeviceHub")
 #sys.mount.axis_directions = (1,-1)
 #sys.add_mount(model="iOptron AZMP", identity="COM2")
   
 '''
-try:
-  #sys.add_coarse_camera(model="ASCOM", identity="Simulator")
-  sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_2")
-  sys.coarse_camera.exposure_time = 200
-  try:  sys.coarse_camera.gain = 400
-  except: pass
-  sys.coarse_camera.plate_scale = 4.5
+#sys.add_coarse_camera(model="ASCOM", identity="Simulator")
+#sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_1")
+sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_2")
+sys.coarse_camera.exposure_time = 200
+try:  sys.coarse_camera.gain = 400
 except: pass
-'''  
+sys.coarse_camera.plate_scale = 4.5
+'''
 
-sys.alignment.set_location_lat_lon(lat=34.2, lon=-118.2, height=600)
-sys.alignment.set_alignment_enu()
-try:
-  tle = sys.target.get_tle_from_sat_id(23712)  # ISS = 25544
-  sys.target.set_target_from_tle(tle)
-except:  pass
-  
+
+tle = sys.target.get_tle_from_sat_id(23712)  # ISS = 25544
+sys.target.set_target_from_tle(tle)
+
+
+#sys.target.get_ephem(obj_id='-48', lat=Site.lat, lon=Site.lon, height=Site.elev)
+sys.target.get_ephem(obj_id='7', lat=Site.lat, lon=Site.lon, height=Site.elev)
   
 try:
     pypogs.GUI(sys, 500)

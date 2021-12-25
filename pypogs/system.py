@@ -33,9 +33,10 @@ import logging
 from threading import Thread
 from csv import writer as csv_write
 
+
 # External imports:
 import numpy as np
-from astropy.time import Time as apy_time
+from astropy.time import Time as apy_time, TimeDelta
 from astropy import units as apy_unit, coordinates as apy_coord, utils as apy_util
 from satellite_tle import fetch_tle_from_celestrak
 from skyfield import sgp4lib as sgp4
@@ -48,6 +49,7 @@ from .hardware_cameras import Camera
 from .hardware_mounts import Mount
 from .hardware_receivers import Receiver
 from .tracking import TrackingThread, ControlLoopThread
+from .horizons_ephem import Ephem
 
 # Useful definitions:
 EPS = 10**-6  # Epsilon for use in non-zero check
@@ -774,7 +776,7 @@ class System:
         self.mount = None
 
     def do_auto_star_alignment(self, max_trials=1, rate_control=True):
-        """Do the auto star alginment procedure by taking eight star images across the sky.
+        """Do the auto star alignment procedure by taking eight star images across the sky.
 
         Will call System.Alignment.set_alignment_from_observations() with the captured images.
 
@@ -892,9 +894,14 @@ class System:
         elif isinstance(self.target.target_object, apy_coord.SkyCoord):
             vec = self.target.get_target_itrf_xyz(times)
             alt_az = self.alignment.get_com_altaz_from_itrf_xyz(vec)
+        elif isinstance(self.target.target_object, Ephem):
+            enu_altaz = self.target.target_object.project_ephem(times)
+            alt_az = self.alignment.get_com_altaz_from_enu_altaz(enu_altaz)
         else:
-            raise RuntimeError('The target is of unknown type!')
+            raise RuntimeError('The target is of unknown type! (%s)' % type(self.target.target_object))
         angvel_alt_az = (((alt_az[:, 1:] - alt_az[:, :-1] + 180) % 360) - 180) / dt
+
+        print(alt_az)
 
         if single_time:
             return alt_az[:, 0], angvel_alt_az[:, 0]
@@ -921,9 +928,13 @@ class System:
             itrf_xyz = self.alignment.get_itrf_relative_from_position(pos)
         elif isinstance(self.target.target_object, apy_coord.SkyCoord):
             itrf_xyz = self.target.get_target_itrf_xyz(times)
+        elif isinstance(self.target.target_object, Ephem):
+            enu_altaz = self.target.target_object.project_ephem(times)
+            itrf_xyz = self.alignment.get_itrf_xyz_from_enu_altaz(enu_altaz)
         else:
-            raise RuntimeError('The target is of unknown type!')
+            raise RuntimeError('The target is of unknown type! (%s)' % type(self.target.target_object))
         itrf_xyz /= np.linalg.norm(itrf_xyz, axis=0, keepdims=True)
+        print(itrf_xyz)
         return itrf_xyz
 
     def slew_to_target(self, time=None, block=True, rate_control=True):
@@ -1772,17 +1783,25 @@ class Target:
           metres) from the centre of Earth to the satellite.
     """
 
-    _allowed_types = (apy_coord.SkyCoord, sgp4.EarthSatellite)
+    _allowed_types = (apy_coord.SkyCoord, sgp4.EarthSatellite, Ephem)
 
     def __init__(self):
         """Create Alignment instance. See class documentation."""
         self._target = None
+        self._source = None
         self._rise_time = None
         self._set_time = None
 
         self._tle_line1 = None
         self._tle_line2 = None
         self._skyfield_ts = sf_api.Loader(_system_data_dir, expire=False).timescale()
+        
+        self._ephem = None
+
+    class Sources:
+        TLE = 0
+        RADEC = 1
+        EPHEM = 2
 
     @property
     def has_target(self):
@@ -1803,6 +1822,20 @@ class Target:
             assert isinstance(target, self._allowed_types), \
                 'Must be None or of type ' + str(self._allowed_types)
             self._target = target
+            
+    @property
+    def source(self):
+        """ Index of selected source of target coordinates """
+        return self._source
+        
+    def set_source(self, target_source_name):
+        """ Sets source of target coordinates 
+        
+        Args:
+            target_source_name (string): source of target coordinates ('TLE', 'RADEC', 'EPHEM')
+        """
+        assert hasattr(self.Sources, target_source_name), 'Invalid target source: "%s"' % target_source_name
+        self._source = getattr(self.Sources, target_source_name)
 
     def set_target_from_ra_dec(self, ra, dec, start_time=None, end_time=None):
         """Create an Astropy *SkyCoord* and set as the target.
@@ -1817,17 +1850,32 @@ class Target:
         self.set_start_end_time(start_time, end_time)
         
     def get_tle_from_sat_id(self, sat_id):
-        """Fetches TLE for a satellite specified by NORAD satellite ID.
+        """Fetches TLE for a satellite specified by Satellite Catalog ID.
         
         Args:
-            sat_id (unsigned int):  NORAD satellite ID number.        
+            sat_id (unsigned int):  Satellite Catalog ID number.        
         """
         try:
             tle = fetch_tle_from_celestrak(sat_id)
             return (tle[1], tle[2], tle[0])
         except:
             tle = None
+
+    def get_ephem(self, obj_id, lat, lon, height):
+        """Fetches and pre-caches ephemeris data from JPL Horizons API
         
+        Args:
+            obj_id (signed int):  NAIF object ID number.
+            lat  (float):     Site North latitude (degrees)
+            lon  (float):     Site East longitude (degrees)
+            height (float):   Site elevation above mean sea level (meters)
+        """
+        utc_now = apy_time.now()
+        utc_tomorrow = utc_now + TimeDelta(1, format='jd')
+        time_step_minutes = 30
+        self._ephem = Ephem(obj_id, utc_now.strftime('%Y-%m-%d %H:00:00'), utc_tomorrow.strftime('%Y-%m-%d %H:00:00'), time_step_minutes, lat, lon, height)
+        self.target_object = self._ephem
+
     def set_target_deep_by_name(self, name, start_time=None, end_time=None):
         """Use Astropy name lookup for setting a SkyCoord deep sky target.
 
@@ -1921,10 +1969,12 @@ class Target:
         if self._target is None:
             return 'No target'
         elif isinstance(self._target, sgp4.EarthSatellite):
-            return 'TLE #' + str(self._target.model.satnum)
+            return 'Source: TLE #' + str(self._target.model.satnum)
         elif isinstance(self._target, apy_coord.SkyCoord):
-            return 'RA:' + str(round(self._target.ra.to_value('deg'), 2)) + DEG \
+            return 'Source: RA:' + str(round(self._target.ra.to_value('deg'), 2)) + DEG \
                    + ' D:' + str(round(self._target.dec.to_value('deg'), 2)) + DEG
+        elif isinstance(self._target, Ephem):
+            return 'Source: object #' + str(self._ephem.obj_id) + ' ephemeris'
 
     def get_target_itrf_xyz(self, times=None):
         """Get the ITRF_xyz position vector from the centre of Earth to the EarthSatellite (in
