@@ -18,8 +18,8 @@ try:
   sys.mount.axis_directions = (1,-1)
 except:  pass
 '''
-sys.add_mount(model="ASCOM", identity="DeviceHub")
-sys.mount.axis_directions = (1,-1)
+#sys.add_mount(model="ASCOM", identity="DeviceHub")
+#sys.mount.axis_directions = (1,-1)
 #sys.add_mount(model="iOptron AZMP", identity="COM2")
   
 '''
