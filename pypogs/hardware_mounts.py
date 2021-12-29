@@ -92,7 +92,7 @@ class Mount:
     _default_model = 'ASCOM'
 
 
-    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, axis_directions=None):
+    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, **properties):
         """Create Mount instance. See class documentation."""
         # Logger setup
         self._debug_folder = None
@@ -136,7 +136,7 @@ class Mount:
         self._home_pos = (0, 0) #Home position
         self._alt_zero = 0 #Amount to subtract from alt.
         self._is_sidereal_tracking = False
-        self._axis_directions = axis_directions or (1, 1)  #set to 1 to use mount default axis direction, -1 to invert direction
+        self._axis_directions = (1, 1)  #set to 1 to use mount default axis direction, -1 to invert direction
         # Only used for model Celestron
         self._serial_port = None
         # Only used for model iOptron AZMP
@@ -173,6 +173,16 @@ class Mount:
             self.identity = identity
         if model is not None:
             self.initialize()
+            
+        available_properties = self.available_properties
+        for property_name in properties:
+            if property_name in available_properties:
+                self._logger.debug('Setting mount property "%s" to value "%s"' % (property_name, properties[property_name]))
+                try:
+                    setattr(self, property_name, properties[property_name])
+                except:
+                    self._logger.warning('Failed to set mount property "%s" to value "%s"' % (property_name, properties[property_name]))
+            
         # Try to get Python to clean up the object properly
         import atexit, weakref
         atexit.register(weakref.ref(self.__del__))
@@ -720,7 +730,7 @@ class Mount:
             if block:
                 self._logger.debug('Waiting for thread to finish')
                 self._control_thread.join()
-                assert success[0], 'Failed moving with rate controller'
+                #assert success[0], 'Failed moving with rate controller'
         else:
             self._logger.debug('Sending move command to mount')
             success = [False]
@@ -1039,12 +1049,16 @@ class Mount:
             self._control_thread.join()
             self._logger.debug('Stopped')
         if self.is_init:
+            if self.is_moving:
+                self._logger.info('stopping mount')
             self._logger.debug('Sending zero rate command')
             self.set_rate_alt_az(0, 0)
             self.stop_sidereal_tracking()
             if self.model == 'ASCOM':
-                if self._ascom_telescope.Slewing:
-                    self._ascom_telescope.AbortSlew()        
+                try:
+                    self._ascom_telescope.AbortSlew()
+                except:
+                    pass
         self._logger.debug('Stopped mount')
 
     def wait_for_move_to(self, timeout=120):
@@ -1101,8 +1115,8 @@ class Mount:
             self._azmp_command_mode_code = self._serial_read_bytes(4, timeout=0.3)        
         assert self._azmp_command_mode_code in self._azmp_command_modes, 'Failed to get command mode from mount (%s)' % str(self._azmp_command_mode_code)
         self._azmp_command_mode = self._azmp_command_modes.get(self._azmp_command_mode_code, 'unavailable')
-        self._logger.debug('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
-        print('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
+        #self._logger.debug('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
+        self._logger.info('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
 
     def _azmp_change_mode(self, to_mode):
         self._logger.debug('Got request to transition mount to %s commanding mode' % to_mode)

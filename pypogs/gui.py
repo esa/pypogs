@@ -1421,17 +1421,19 @@ class TargetFrame(ttk.Frame):
             self.resizable(False, False)
 #            self.grab_set() #Grab control
 
+            # Fetch TLE Input:
             get_tle_frame = ttk.Frame(self)
             get_tle_frame.grid(row=0, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
             ttk.Label(get_tle_frame, text='Get TLE from satellite ID:').grid(row=0, column=0, columnspan=3, sticky=tk.E)
-            ttk.Label(get_tle_frame, text='NORAD ID:').grid(row=1, column=0, sticky=tk.E)
-            self.sat_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
-            self.sat_id_entry.grid(row=1, column=1)
-            ttk.Button(get_tle_frame, text='Get', command=self.get_tle_callback).grid(row=1, column=2)
-            ttk.Button(get_tle_frame, text='Get & Set TLE', command=self.get_and_set_tle_callback).grid(row=1, column=3, sticky=tk.W+tk.E)
+            ttk.Label(get_tle_frame, text='Satellite Catalog ID:').grid(row=1, column=0, sticky=tk.E)
+            self.sat_norad_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
+            self.sat_norad_id_entry.grid(row=1, column=1)
+            ttk.Button(get_tle_frame, text='Fetch', command=self.get_tle_callback).grid(row=1, column=2)
+            ttk.Button(get_tle_frame, text='Fetch & Set TLE', command=self.get_and_set_tle_callback).grid(row=1, column=3, sticky=tk.W+tk.E)
             self.sat_name_label = ttk.Label(get_tle_frame, font='TkFixedFont')
             self.sat_name_label.grid(row=1, column=4, columnspan=1, padx=10)
 
+            # TLE Manual Input:
             tle_frame = ttk.Frame(self)
             tle_frame.grid(row=1, column=0, columnspan=5, padx=(0,10), pady=10)
             ttk.Label(tle_frame, text='Set target from TLE:').grid(row=0, column=0)
@@ -1439,8 +1441,9 @@ class TargetFrame(ttk.Frame):
             self.tle_line1_entry.grid(row=1, column=0)
             self.tle_line2_entry = ttk.Entry(tle_frame, width=69, font='TkFixedFont')
             self.tle_line2_entry.grid(row=2, column=0)
-            ttk.Button(tle_frame, text='Set', command=self.tle_callback).grid(row=3, column=0, sticky=tk.W+tk.E)
+            ttk.Button(tle_frame, text='Set', command=self.set_tle_callback).grid(row=3, column=0, sticky=tk.W+tk.E)
 
+            # RA/Dec Input:
             radec_frame = ttk.Frame(self)
             radec_frame.grid(row=2, column=0, columnspan=3, padx=(10,0), pady=10)
             ttk.Label(radec_frame, text='Set target from RA/Dec:').grid(row=0, column=0, columnspan=2)
@@ -1450,9 +1453,10 @@ class TargetFrame(ttk.Frame):
             ttk.Label(radec_frame, text='Dec: (deg)').grid(row=2, column=0, sticky=tk.E)
             self.dec_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
             self.dec_entry.grid(row=2, column=1)
-            ttk.Button(radec_frame, text='Set', command=self.radec_callback) \
+            ttk.Button(radec_frame, text='Set', command=self.set_radec_callback) \
                                                 .grid(row=3, column=1, sticky=tk.W+tk.E)
 
+            # Tracking Time Input:
             time_frame = ttk.Frame(self)
             time_frame.grid(row=2, column=3, columnspan=3, padx=(10,0), pady=10)
             ttk.Label(time_frame, text='Set tracking time (optional):').grid(row=0, column=0, columnspan=3)
@@ -1466,6 +1470,17 @@ class TargetFrame(ttk.Frame):
                                                             .grid(row=3, column=1, sticky=tk.W+tk.E)
             ttk.Button(time_frame, text='Clear', width=10, command=self.clear_time_callback) \
                                                             .grid(row=3, column=2, sticky=tk.W+tk.E)
+
+            # Ephemeris Input:
+            get_ephem_frame = ttk.Frame(self)
+            get_ephem_frame.grid(row=3, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
+            ttk.Label(get_ephem_frame, text='Get Ephemeris').grid(row=0, column=0, columnspan=3, sticky=tk.E)
+            ttk.Label(get_ephem_frame, text='NAIF object ID:').grid(row=1, column=0, sticky=tk.E)
+            self.naif_obj_id_entry = ttk.Entry(get_ephem_frame, width=15, font='TkFixedFont')
+            self.naif_obj_id_entry.grid(row=1, column=1)
+            ttk.Button(get_ephem_frame, text='Get', command=self.get_ephem_callback).grid(row=1, column=2)
+            self.sat_name_label = ttk.Label(get_ephem_frame, font='TkFixedFont')
+            self.sat_name_label.grid(row=1, column=3, columnspan=1, padx=10, sticky=tk.W+tk.E)
 
             self.protocol('WM_DELETE_WINDOW', self.withdraw)
             self.update()
@@ -1502,9 +1517,9 @@ class TargetFrame(ttk.Frame):
             self.master.update()
 
         def get_tle_callback(self):
-            self._logger.debug("TLE requested for sat ID: " + self.sat_id_entry.get())        
+            self._logger.debug("TLE requested for sat ID: " + self.sat_norad_id_entry.get())        
             try:
-                self.sat_id = int(self.sat_id_entry.get())
+                self.sat_id = int(self.sat_norad_id_entry.get())
             except:
                 self._logger.debug("sat ID invalid")
                 self.sat_name_label['text'] = ''
@@ -1526,26 +1541,30 @@ class TargetFrame(ttk.Frame):
         def get_and_set_tle_callback(self):
             self.get_tle_callback()
             if self.sat_id is not None:
-                self.tle_callback()
+                self.set_tle_callback()
                     
-        def tle_callback(self):
+        def set_tle_callback(self):
             try:
                 line1 = self.tle_line1_entry.get()
                 line2 = self.tle_line2_entry.get()
                 self.master.sys.target.set_target_from_tle((line1, line2))
                 self.clear_time_callback()
                 #self.update() called in clear_time_callback()
+                self.master.sys.target.set_source('TLE')
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
-        def radec_callback(self):
+                
+        def set_radec_callback(self):
             try:
                 ra = self.ra_entry.get()
                 dec = self.dec_entry.get()
                 self.master.sys.target.set_target_from_ra_dec(ra, dec)
                 self.clear_time_callback()
                 #self.update() called in clear_time_callback()
+                self.master.sys.target.set_source('RADEC')
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
+                
         def set_time_callback(self):
             try:
                 start = self.start_entry.get()
@@ -1560,6 +1579,7 @@ class TargetFrame(ttk.Frame):
                 self.update()
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
+                
         def clear_time_callback(self):
             try:
                 self.start_entry.delete(0, 'end')
@@ -1571,6 +1591,21 @@ class TargetFrame(ttk.Frame):
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
 
+        def get_ephem_callback(self):
+            try:
+                self._logger.debug("Ephemeris requested for NAIF object ID: " + self.naif_obj_id_entry.get())
+                obj_id = self.naif_obj_id_entry.get()
+                (lat, lon, elevation_m) = self.master.sys.alignment.get_location_lat_lon_height()
+                assert lat and lon and elevation_m, 'Alignment not initialized'
+                self._logger.info("Ephemeris requested for sat ID: " + obj_id)
+                self.master.sys.target.get_ephem(obj_id, lat, lon, elevation_m)
+                if self.master.sys.target._ephem.target_name is not None:
+                    self._logger.info('Ephemeris target object: "%s"' % self.master.sys.target._ephem.target_name)
+                self.sat_name_label['text'] = self.master.sys.target._ephem.target_name or ''
+                self.master.sys.target.set_source('EPHEM')
+            except Exception as err:
+                ErrorPopup(self, err, self._logger)
+                self.sat_name_label['text'] = ''
 
 class AlignmentFrame(ttk.Frame):
     """Extends tkinter.Frame for controlling System.alignment"""
@@ -1741,21 +1776,36 @@ class StatusFrame(ttk.Frame):
         self._logger.debug('StatusFrame got update request')
         """Update status once. Auto update with start() and stop() instead."""
         keys = ('alt', 'azi', 'alt_rate', 'azi_rate')
-        state = self.sys.mount.state_cache if self.sys.mount is not None else None
+        mount_state = self.sys.mount.state_cache if self.sys.mount is not None else None
         status_string = ''
         for key in keys:
             try:
-                status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(state[key]) + '\n')
+                status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(mount_state[key]) + '\n')
             except:
                 status_string += ('{:>13s}:'.format(key) + '  ---  ' + '\n')
-        state = self.sys.control_loop_thread.state_cache
-        for key in state.keys():
+                
+        control_state = self.sys.control_loop_thread.state_cache
+            
+        # Modify mode indicator
+        if self.sys.mount.is_sidereal_tracking:
+            if control_state['mode'] is None or control_state['mode'] == 'SLEW':
+                control_state['mode'] = 'SDRL'
+        elif control_state['mode'] == 'SDRL':
+            control_state['mode'] = None
+
+        if self.sys.mount.is_moving:            
+            if control_state['mode'] is None:
+                control_state['mode'] = 'SLEW'
+        elif control_state['mode'] == 'SLEW':
+            control_state['mode'] = None            
+            
+        for key in control_state.keys():
             try:
                 if key in ('mode', 'ct_has_track', 'ft_has_track'):
-                    assert state[key] is not None
-                    status_string += ('{:>13s}:'.format(key) + '  {: <5}'.format(str(state[key])) + '\n')
+                    assert control_state[key] is not None
+                    status_string += ('{:>13s}:'.format(key) + '  {: <5}'.format(str(control_state[key])) + '\n')
                 else:
-                    status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(state[key]) + '\n')
+                    status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(control_state[key]) + '\n')
             except:
                 status_string += ('{:>13s}:'.format(key) + '  ---  ' + '\n')
 
@@ -1844,7 +1894,7 @@ class MountControlFrame(ttk.Frame):
     def stop_button_callback(self):
         self._logger.debug('MountControlFrame stop clicked')
         assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
-        self.sys.mount.stop()
+        self.sys.stop()
 
     def send_button_callback(self):
         self._logger.debug('MountControlFrame send clicked')
@@ -1898,8 +1948,8 @@ class MountControlFrame(ttk.Frame):
     def toggle_sidereal_tracking(self):
         self._logger.debug('Sidereal tracking button clicked')
         if self.sys.mount.is_sidereal_tracking:
-            self._logger.debug('Sidereal tracking is on.  Will turn off.')
-            self.sys.mount.stop_sidereal_tracking()            
+            self._logger.debug('Sidereal tracking is on.  Will turn off.')            
+            self.sys.mount.stop_sidereal_tracking()
         else:
             self._logger.debug('Sidereal tracking is off.  Will turn on.')
             # Require mount initialized

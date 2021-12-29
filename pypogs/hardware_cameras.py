@@ -85,7 +85,7 @@ class Camera:
     _supported_models = ('ptgrey','ascom')
     _default_model = 'ascom'
 
-    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
+    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, properties=None):
         """Create Camera instance. See class documentation."""
         # Logger setup
         self._debug_folder = None
@@ -149,6 +149,16 @@ class Camera:
             self.initialize()
         else:
             self._logger.debug('Skipping auto-initialise')
+            
+        available_properties = self.available_properties
+        for property_name in properties:
+            if property_name in available_properties:
+                self._logger.debug('Setting property "%s" to value "%s"' % (property_name, properties[property_name]))
+                try:
+                    setattr(self, property_name, properties[property_name])
+                except:
+                    self._logger.warning('Failed to set camera property "%s" to value "%s"' % (property_name, properties[property_name]))
+            
         self._logger.debug('Registering destructor')
         # TODO: Should we register deinitialisor instead? (probably yes...)
         import atexit, weakref
@@ -1211,13 +1221,12 @@ class Camera:
             binMax = self._ascom_camera.MaxBinX
             if binMax and binning <= binMax:
                 try:
-                    print("setting binning to ",binning)
+                    self._logger.info("setting binning to %i" % binning)
                     self._ascom_camera.BinX = binning
                     self._ascom_camera.BinY = binning
                     self._ascom_camera.NumX = self._ascom_camera.CameraXSize/binning
                     self._ascom_camera.NumY = self._ascom_camera.CameraYSize/binning
                     self._binning = binning
-                    #print(self._ascom_camera.BinX, binning)
                 except:
                     raise AssertionError('Unable to set camera binning')
             else:

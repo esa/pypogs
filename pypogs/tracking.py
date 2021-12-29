@@ -1521,8 +1521,9 @@ class TrackingThread:
         loop_index = 0
         try:
             while not self._stop_running:
+                image_wait_timeout = self._camera.exposure_time * 1.1 + 0.5
                 # Synchronisation and time management
-                if not self._process_image.wait(timeout=3):
+                if not self._process_image.wait(timeout=image_wait_timeout):
                     self._log_warning('Timeout waiting for image in loop')
                 image = self._image_data.copy()
                 loop_timestamp = precision_timestamp() - start_timestamp
