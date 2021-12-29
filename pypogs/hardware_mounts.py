@@ -1050,7 +1050,7 @@ class Mount:
             self._logger.debug('Stopped')
         if self.is_init:
             if self.is_moving:
-                print('stopping mount')
+                self._logger.info('stopping mount')
             self._logger.debug('Sending zero rate command')
             self.set_rate_alt_az(0, 0)
             self.stop_sidereal_tracking()
@@ -1115,8 +1115,8 @@ class Mount:
             self._azmp_command_mode_code = self._serial_read_bytes(4, timeout=0.3)        
         assert self._azmp_command_mode_code in self._azmp_command_modes, 'Failed to get command mode from mount (%s)' % str(self._azmp_command_mode_code)
         self._azmp_command_mode = self._azmp_command_modes.get(self._azmp_command_mode_code, 'unavailable')
-        self._logger.debug('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
-        print('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
+        #self._logger.debug('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
+        self._logger.info('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(self._azmp_command_mode_code)))
 
     def _azmp_change_mode(self, to_mode):
         self._logger.debug('Got request to transition mount to %s commanding mode' % to_mode)

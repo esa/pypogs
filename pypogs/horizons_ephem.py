@@ -78,7 +78,7 @@ class Ephem:
             found_ephem_start = True
           elif line.startswith('Target body name'):
             try:
-              self.target_name = line[18: line.find('(') or len(line)]
+              self.target_name = line[18: line.find(' (') or len(line)]
             except:
               pass
         elif not found_ephem_end:

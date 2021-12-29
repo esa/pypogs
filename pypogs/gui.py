@@ -1479,7 +1479,8 @@ class TargetFrame(ttk.Frame):
             self.naif_obj_id_entry = ttk.Entry(get_ephem_frame, width=15, font='TkFixedFont')
             self.naif_obj_id_entry.grid(row=1, column=1)
             ttk.Button(get_ephem_frame, text='Get', command=self.get_ephem_callback).grid(row=1, column=2)
-
+            self.sat_name_label = ttk.Label(get_ephem_frame, font='TkFixedFont')
+            self.sat_name_label.grid(row=1, column=3, columnspan=1, padx=10, sticky=tk.W+tk.E)
 
             self.protocol('WM_DELETE_WINDOW', self.withdraw)
             self.update()
@@ -1596,14 +1597,15 @@ class TargetFrame(ttk.Frame):
                 obj_id = self.naif_obj_id_entry.get()
                 (lat, lon, elevation_m) = self.master.sys.alignment.get_location_lat_lon_height()
                 assert lat and lon and elevation_m, 'Alignment not initialized'
-                print("Ephemeris requested for sat ID: " + obj_id)
+                self._logger.info("Ephemeris requested for sat ID: " + obj_id)
                 self.master.sys.target.get_ephem(obj_id, lat, lon, elevation_m)
-                print(self.master.sys.target._ephem.is_init)
-                print(self.master.sys.target._ephem.target_name)
+                if self.master.sys.target._ephem.target_name is not None:
+                    self._logger.info('Ephemeris target object: "%s"' % self.master.sys.target._ephem.target_name)
+                self.sat_name_label['text'] = self.master.sys.target._ephem.target_name or ''
                 self.master.sys.target.set_source('EPHEM')
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
-
+                self.sat_name_label['text'] = ''
 
 class AlignmentFrame(ttk.Frame):
     """Extends tkinter.Frame for controlling System.alignment"""
@@ -1892,7 +1894,7 @@ class MountControlFrame(ttk.Frame):
     def stop_button_callback(self):
         self._logger.debug('MountControlFrame stop clicked')
         assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
-        self.sys.mount.stop()
+        self.sys.stop()
 
     def send_button_callback(self):
         self._logger.debug('MountControlFrame send clicked')

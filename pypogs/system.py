@@ -901,8 +901,6 @@ class System:
             raise RuntimeError('The target is of unknown type! (%s)' % type(self.target.target_object))
         angvel_alt_az = (((alt_az[:, 1:] - alt_az[:, :-1] + 180) % 360) - 180) / dt
 
-        #print(alt_az)
-
         if single_time:
             return alt_az[:, 0], angvel_alt_az[:, 0]
         else:
@@ -934,7 +932,6 @@ class System:
         else:
             raise RuntimeError('The target is of unknown type! (%s)' % type(self.target.target_object))
         itrf_xyz /= np.linalg.norm(itrf_xyz, axis=0, keepdims=True)
-        #print(itrf_xyz)
         return itrf_xyz
 
     def slew_to_target(self, time=None, block=True, rate_control=True):

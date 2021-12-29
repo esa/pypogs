@@ -1221,13 +1221,12 @@ class Camera:
             binMax = self._ascom_camera.MaxBinX
             if binMax and binning <= binMax:
                 try:
-                    print("setting binning to ",binning)
+                    self._logger.info("setting binning to %i" % binning)
                     self._ascom_camera.BinX = binning
                     self._ascom_camera.BinY = binning
                     self._ascom_camera.NumX = self._ascom_camera.CameraXSize/binning
                     self._ascom_camera.NumY = self._ascom_camera.CameraYSize/binning
                     self._binning = binning
-                    #print(self._ascom_camera.BinX, binning)
                 except:
                     raise AssertionError('Unable to set camera binning')
             else:
