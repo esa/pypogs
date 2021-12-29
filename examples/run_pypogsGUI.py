@@ -7,47 +7,64 @@ Run this script (i.e. type python run_pypogsGUI.py in a termnial window) to star
 """
 import sys
 sys.path.append('..')
-
 import pypogs
 
-class Site:
-  lat  =   34.2  # deg N
-  lon  = -118.2  # deg E
-  elev =   600   # meters above MSL
-
-
+# INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
-sys.alignment.set_location_lat_lon(lat=Site.lat, lon=Site.lon, height=Site.elev)
+# CONFIGURE GROUND STATION SITE:
+class MySite:
+  lat  =   34.2  # degrees N
+  lon  = -118.2  # degrees E
+  elev =   600   # meters above MSL
+sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 sys.alignment.set_alignment_enu()
 
-#sys.add_mount(model="ASCOM", identity="Simulator")
-sys.add_mount(model="ASCOM", identity="DeviceHub")
-#sys.mount.axis_directions = (1,-1)
+
+# ADD MOUNT:
+sys.add_mount(model="ASCOM", identity="Simulator")
+#sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
 #sys.add_mount(model="iOptron AZMP", identity="COM2")
-  
-'''
+#sys.add_mount(model="Celestron", identity="COM2")
+
+
+# ADD COARSE CAMERA:
+coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 #sys.add_coarse_camera(model="ASCOM", identity="Simulator")
 #sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_1")
-sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_2")
-sys.coarse_camera.exposure_time = 200
-try:  sys.coarse_camera.gain = 400
-except: pass
-sys.coarse_camera.plate_scale = 4.5
-'''
+sys.add_coarse_camera(
+  model="ASCOM", 
+  #identity="ASICamera2_1",
+  #identity="ASICamera2_2",
+  identity="Simulator",
+  exposure_time = 150,
+  gain = 400,
+  plate_scale = round(coarsePlateScale, 3),  
+  binning = 2
+)
 
 
-tle = sys.target.get_tle_from_sat_id(23712)  # ISS = 25544
-sys.target.set_target_from_tle(tle)
+# ADD STAR CAMERA:
+sys.add_star_camera_from_coarse()
 
 
-#sys.target.get_ephem(obj_id='-48', lat=Site.lat, lon=Site.lon, height=Site.elev)
-sys.target.get_ephem(obj_id='7', lat=Site.lat, lon=Site.lon, height=Site.elev)
-  
+# ADD FINE CAMERA:
+finePlateScale = 206 * 5.86 / 2350 # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
+#sys.add_fine_camera(model="ASCOM", identity="ASICamera2_1", exposure_time=500, gain=260, plate_scale=finePlateScale)
+
+
+# SET TARGET:
+sys.target.get_and_set_tle_from_sate_id(23712)  # ISS = 25544
+
+#sys.target.get_ephem(obj_id='-48', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+#sys.target.get_ephem(obj_id='7', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+#sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+
+
+# START GUI:
 try:
     pypogs.GUI(sys, 500)
 except Exception:
     raise
 finally:
     sys.deinitialize()
-
