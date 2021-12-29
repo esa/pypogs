@@ -546,7 +546,7 @@ class System:
             self._coarse_track_thread.camera = cam
         self._logger.debug('Set coarse camera to: ' + str(self.coarse_camera))
 
-    def add_coarse_camera(self, model=None, identity=None, name='CoarseCamera', auto_init=True):
+    def add_coarse_camera(self, model=None, identity=None, name='CoarseCamera', auto_init=True, **properties):
         """Create and set the coarse camera. Calls pypogs.Camera constructor with
         name='CoarseCamera' and the given arguments.
 
@@ -580,7 +580,7 @@ class System:
         else:
             self._logger.debug('Dont have anything old to clean up, create new camera')
             self.coarse_camera = Camera(model=model, identity=identity, name=name,
-                                        auto_init=auto_init)
+                                        auto_init=auto_init, properties=properties)
         return self.coarse_camera
 
     def add_coarse_camera_from_star(self):
@@ -901,7 +901,7 @@ class System:
             raise RuntimeError('The target is of unknown type! (%s)' % type(self.target.target_object))
         angvel_alt_az = (((alt_az[:, 1:] - alt_az[:, :-1] + 180) % 360) - 180) / dt
 
-        print(alt_az)
+        #print(alt_az)
 
         if single_time:
             return alt_az[:, 0], angvel_alt_az[:, 0]
@@ -934,7 +934,7 @@ class System:
         else:
             raise RuntimeError('The target is of unknown type! (%s)' % type(self.target.target_object))
         itrf_xyz /= np.linalg.norm(itrf_xyz, axis=0, keepdims=True)
-        print(itrf_xyz)
+        #print(itrf_xyz)
         return itrf_xyz
 
     def slew_to_target(self, time=None, block=True, rate_control=True):
@@ -978,6 +978,11 @@ class System:
     def stop(self):
         """Stop all tasks."""
         self._logger.info('Stop command received.')
+        if self.mount is not None and self.mount.is_init:
+            try:
+                self.mount.stop()
+            except BaseException:
+                self._logger.warning('Failed to stop mount.', exc_info=True)
         try:
             self.control_loop_thread.stop()
         except BaseException:
@@ -1856,11 +1861,22 @@ class Target:
             sat_id (unsigned int):  Satellite Catalog ID number.        
         """
         try:
-            tle = fetch_tle_from_celestrak(sat_id)
-            return (tle[1], tle[2], tle[0])
+            tle_from_celestrak = fetch_tle_from_celestrak(sat_id)
+            tle = (tle_from_celestrak[1], tle_from_celestrak[2], tle_from_celestrak[0]) #reorder
         except:
             tle = None
+        return tle
 
+    def get_and_set_tle_from_sate_id(self, sat_id):
+        """Fetches TLE for a satellite specified by Satellite Catalog ID and sets TLE and target.
+        
+        Args:
+            sat_id (unsigned int):  Satellite Catalog ID number.        
+        """
+        tle = self.get_tle_from_sat_id(sat_id)
+        if tle is not None:
+            self.set_target_from_tle(tle)
+            
     def get_ephem(self, obj_id, lat, lon, height):
         """Fetches and pre-caches ephemeris data from JPL Horizons API
         
@@ -1974,7 +1990,7 @@ class Target:
             return 'Source: RA:' + str(round(self._target.ra.to_value('deg'), 2)) + DEG \
                    + ' D:' + str(round(self._target.dec.to_value('deg'), 2)) + DEG
         elif isinstance(self._target, Ephem):
-            return 'Source: object #' + str(self._ephem.obj_id) + ' ephemeris'
+            return 'Source: ephem obj #' + str(self._ephem.obj_id)
 
     def get_target_itrf_xyz(self, times=None):
         """Get the ITRF_xyz position vector from the centre of Earth to the EarthSatellite (in

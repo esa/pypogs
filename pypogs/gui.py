@@ -1774,21 +1774,36 @@ class StatusFrame(ttk.Frame):
         self._logger.debug('StatusFrame got update request')
         """Update status once. Auto update with start() and stop() instead."""
         keys = ('alt', 'azi', 'alt_rate', 'azi_rate')
-        state = self.sys.mount.state_cache if self.sys.mount is not None else None
+        mount_state = self.sys.mount.state_cache if self.sys.mount is not None else None
         status_string = ''
         for key in keys:
             try:
-                status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(state[key]) + '\n')
+                status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(mount_state[key]) + '\n')
             except:
                 status_string += ('{:>13s}:'.format(key) + '  ---  ' + '\n')
-        state = self.sys.control_loop_thread.state_cache
-        for key in state.keys():
+                
+        control_state = self.sys.control_loop_thread.state_cache
+            
+        # Modify mode indicator
+        if self.sys.mount.is_sidereal_tracking:
+            if control_state['mode'] is None or control_state['mode'] == 'SLEW':
+                control_state['mode'] = 'SDRL'
+        elif control_state['mode'] == 'SDRL':
+            control_state['mode'] = None
+
+        if self.sys.mount.is_moving:            
+            if control_state['mode'] is None:
+                control_state['mode'] = 'SLEW'
+        elif control_state['mode'] == 'SLEW':
+            control_state['mode'] = None            
+            
+        for key in control_state.keys():
             try:
                 if key in ('mode', 'ct_has_track', 'ft_has_track'):
-                    assert state[key] is not None
-                    status_string += ('{:>13s}:'.format(key) + '  {: <5}'.format(str(state[key])) + '\n')
+                    assert control_state[key] is not None
+                    status_string += ('{:>13s}:'.format(key) + '  {: <5}'.format(str(control_state[key])) + '\n')
                 else:
-                    status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(state[key]) + '\n')
+                    status_string += ('{:>13s}:'.format(key) + '{: 7.2f}'.format(control_state[key]) + '\n')
             except:
                 status_string += ('{:>13s}:'.format(key) + '  ---  ' + '\n')
 
@@ -1931,8 +1946,8 @@ class MountControlFrame(ttk.Frame):
     def toggle_sidereal_tracking(self):
         self._logger.debug('Sidereal tracking button clicked')
         if self.sys.mount.is_sidereal_tracking:
-            self._logger.debug('Sidereal tracking is on.  Will turn off.')
-            self.sys.mount.stop_sidereal_tracking()            
+            self._logger.debug('Sidereal tracking is on.  Will turn off.')            
+            self.sys.mount.stop_sidereal_tracking()
         else:
             self._logger.debug('Sidereal tracking is off.  Will turn on.')
             # Require mount initialized
