@@ -85,7 +85,7 @@ class Camera:
     _supported_models = ('ptgrey','ascom')
     _default_model = 'ascom'
 
-    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, properties=None):
+    def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, properties=[]):
         """Create Camera instance. See class documentation."""
         # Logger setup
         self._debug_folder = None
@@ -464,9 +464,12 @@ class Camera:
                     self._log_debug('User canceled camera selection')
             assert camDriverName, 'Unable to identify ASCOM camera.'
             self._identity = camDriverName.replace('ASCOM.','').replace('.Camera','')
-            self._log_debug('Loading ASCOM camera driver: '+camDriverName)
+            self._logger.info('Loading ASCOM camera driver: '+camDriverName)
             self._ascom_pythoncom.CoInitialize()
-            self._ascom_camera = self._ascom_driver_handler.Dispatch(camDriverName)
+            try:
+                self._ascom_camera = self._ascom_driver_handler.Dispatch(camDriverName)
+            except self._ascom_pythoncom.com_error:
+                raise AssertionError('Error attaching to device "%s", check name.' % camDriverName)
             assert hasattr(self._ascom_camera, 'Connected'), "Unable to access camera driver"
             self._log_debug('Connecting to camera')
             self._ascom_camera.Connected = True

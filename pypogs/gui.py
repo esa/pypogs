@@ -1428,10 +1428,9 @@ class TargetFrame(ttk.Frame):
             ttk.Label(get_tle_frame, text='Satellite Catalog ID:').grid(row=1, column=0, sticky=tk.E)
             self.sat_norad_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
             self.sat_norad_id_entry.grid(row=1, column=1)
-            ttk.Button(get_tle_frame, text='Fetch', command=self.get_tle_callback).grid(row=1, column=2)
-            ttk.Button(get_tle_frame, text='Fetch & Set TLE', command=self.get_and_set_tle_callback).grid(row=1, column=3, sticky=tk.W+tk.E)
+            ttk.Button(get_tle_frame, text='Get', command=self.get_and_set_tle_callback).grid(row=1, column=2)
             self.sat_name_label = ttk.Label(get_tle_frame, font='TkFixedFont')
-            self.sat_name_label.grid(row=1, column=4, columnspan=1, padx=10)
+            self.sat_name_label.grid(row=1, column=3, columnspan=2, padx=10, sticky=tk.E+tk.W)
 
             # TLE Manual Input:
             tle_frame = ttk.Frame(self)
@@ -1479,8 +1478,8 @@ class TargetFrame(ttk.Frame):
             self.naif_obj_id_entry = ttk.Entry(get_ephem_frame, width=15, font='TkFixedFont')
             self.naif_obj_id_entry.grid(row=1, column=1)
             ttk.Button(get_ephem_frame, text='Get', command=self.get_ephem_callback).grid(row=1, column=2)
-            self.sat_name_label = ttk.Label(get_ephem_frame, font='TkFixedFont')
-            self.sat_name_label.grid(row=1, column=3, columnspan=1, padx=10, sticky=tk.W+tk.E)
+            self.ephem_obj_name_label = ttk.Label(get_ephem_frame, font='TkFixedFont')
+            self.ephem_obj_name_label.grid(row=1, column=3, columnspan=1, padx=10, sticky=tk.W+tk.E)
 
             self.protocol('WM_DELETE_WINDOW', self.withdraw)
             self.update()
@@ -1601,11 +1600,11 @@ class TargetFrame(ttk.Frame):
                 self.master.sys.target.get_ephem(obj_id, lat, lon, elevation_m)
                 if self.master.sys.target._ephem.target_name is not None:
                     self._logger.info('Ephemeris target object: "%s"' % self.master.sys.target._ephem.target_name)
-                self.sat_name_label['text'] = self.master.sys.target._ephem.target_name or ''
+                self.ephem_obj_name_label['text'] = self.master.sys.target._ephem.target_name or ''
                 self.master.sys.target.set_source('EPHEM')
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
-                self.sat_name_label['text'] = ''
+                self.ephem_obj_name_label['text'] = ''
 
 class AlignmentFrame(ttk.Frame):
     """Extends tkinter.Frame for controlling System.alignment"""
@@ -1787,17 +1786,18 @@ class StatusFrame(ttk.Frame):
         control_state = self.sys.control_loop_thread.state_cache
             
         # Modify mode indicator
-        if self.sys.mount.is_sidereal_tracking:
-            if control_state['mode'] is None or control_state['mode'] == 'SLEW':
-                control_state['mode'] = 'SDRL'
-        elif control_state['mode'] == 'SDRL':
-            control_state['mode'] = None
+        if self.sys.mount is not None:
+            if self.sys.mount.is_sidereal_tracking:
+                if control_state['mode'] is None or control_state['mode'] == 'SLEW':
+                    control_state['mode'] = 'SDRL'
+            elif control_state['mode'] == 'SDRL':
+                control_state['mode'] = None
 
-        if self.sys.mount.is_moving:            
-            if control_state['mode'] is None:
-                control_state['mode'] = 'SLEW'
-        elif control_state['mode'] == 'SLEW':
-            control_state['mode'] = None            
+            if self.sys.mount.is_moving:            
+                if control_state['mode'] is None:
+                    control_state['mode'] = 'SLEW'
+            elif control_state['mode'] == 'SLEW':
+                control_state['mode'] = None            
             
         for key in control_state.keys():
             try:

@@ -626,7 +626,7 @@ class System:
             self._fine_track_thread.camera = cam
         self._logger.debug('Set fine camera to: ' + str(self.fine_camera))
 
-    def add_fine_camera(self, model=None, identity=None, name='FineCamera', auto_init=True):
+    def add_fine_camera(self, model=None, identity=None, name='FineCamera', auto_init=True, **properties):
         """Create and set the fine camera. Calls pypogs.Camera constructor with
         name='FineCamera' and the given arguments.
 
@@ -659,7 +659,7 @@ class System:
         else:
             self._logger.debug('Dont have anything old to clean up, create new camera')
             self.fine_camera = Camera(model=model, identity=identity, name=name,
-                                      auto_init=auto_init)
+                                        auto_init=auto_init, properties=properties)
         return self.fine_camera
 
     def clear_fine_camera(self):
@@ -775,7 +775,7 @@ class System:
         """Set the mount to None."""
         self.mount = None
 
-    def do_auto_star_alignment(self, max_trials=1, rate_control=True):
+    def do_auto_star_alignment(self, max_trials=1, rate_control=True, pos_list=None):
         """Do the auto star alignment procedure by taking eight star images across the sky.
 
         Will call System.Alignment.set_alignment_from_observations() with the captured images.
@@ -790,14 +790,16 @@ class System:
         assert self.star_camera is not None, 'No star camera'
         assert self.is_init, 'System not initialized'
         assert not self.is_busy, 'System is busy'
+        
+        if pos_list is None:
+            pos_list = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45),
+                        (60, 135), (40, 135)]
 
         def run():
             self._logger.info('Starting auto-alignment.')
             try:
                 # TODO: tetra3 should be loaded and configurable from System.
                 t3 = Tetra3('default_database')
-                pos_list = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45),
-                            (60, 135), (40, 135)]
                 alignment_list = []
                 start_time = apy_time.now()
                 # Create logfile

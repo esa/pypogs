@@ -657,7 +657,7 @@ class Mount:
                 azi_axis_rate = self._serial_query(':Q0#', eol_char='#').decode('ASCII')
                 alt_axis_rate = self._serial_query(':Q1#', eol_char='#').decode('ASCII')
                 #self._logger.debug('azi_axis_rate: "%s", alt_axis_rate: "%s"' % (azi_axis_rate, alt_axis_rate))
-                is_moving = (int(azi_axis_rate) != 0 or int(azi_axis_rate) != 0)
+                is_moving = (int(azi_axis_rate or 0) != 0 or int(alt_axis_rate or 0) != 0)
             elif self._azmp_command_mode == 'normal':
                 mount_state = self._serial_query(':GLS#', eol_char='#').decode('ASCII')
                 mount_system_status_byte = mount_state[14]
