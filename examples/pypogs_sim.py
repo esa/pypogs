@@ -22,9 +22,9 @@ sys.alignment.set_alignment_enu()
 
 
 # ADD MOUNT:
-#sys.add_mount(model="ASCOM", identity="Simulator")
+sys.add_mount(model="ASCOM", identity="Simulator")
 #sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
-sys.add_mount(model="iOptron AZMP", identity="COM2")
+#sys.add_mount(model="iOptron AZMP", identity="COM2")
 #sys.add_mount(model="Celestron", identity="COM2")
 
 
@@ -36,8 +36,8 @@ coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um
 sys.add_coarse_camera(
   model="ASCOM", 
   #identity="ASICamera2",
-  identity="ASICamera2_2",
-  #identity="Simulator",
+  #identity="ASICamera2_2",
+  identity="Simulator",
   exposure_time = 150,
   gain = 400,
   plate_scale = round(coarsePlateScale, 3),  

@@ -1786,19 +1786,17 @@ class StatusFrame(ttk.Frame):
         control_state = self.sys.control_loop_thread.state_cache
             
         # Modify mode indicator
-        if self.sys.mount is not None:
-            if self.sys.mount.is_sidereal_tracking:
-                if control_state['mode'] is None or control_state['mode'] == 'SLEW':
-                    control_state['mode'] = 'SDRL'
-            elif control_state['mode'] == 'SDRL':
-                control_state['mode'] = None
+        '''
+        if self.sys.mount is not None and self.sys.mount.is_init:
+            if control_state['mode'] in (None, 'SDRL'):
+                if self.sys.mount.is_sidereal_tracking:
+                    if control_state['mode'] is None:  # recheck since could have changed while checking if sidereal
+                        control_state['mode'] = 'SDRL'
+                else:
+                    control_state['mode'] = None
+        '''
+                    
 
-            if self.sys.mount.is_moving:            
-                if control_state['mode'] is None:
-                    control_state['mode'] = 'SLEW'
-            elif control_state['mode'] == 'SLEW':
-                control_state['mode'] = None            
-            
         for key in control_state.keys():
             try:
                 if key in ('mode', 'ct_has_track', 'ft_has_track'):

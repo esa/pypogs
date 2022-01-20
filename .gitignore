@@ -5,6 +5,10 @@
 # Cache
 *__pycache__*
 
+# Personal
+*my_*
+/my_&
+
 # System data and debug
 /pypogs/data/*
 /pypogs/debug/*

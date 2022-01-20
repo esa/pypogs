@@ -753,7 +753,7 @@ class ControlLoopThread:
         mount_alt_az = np.array(self._parent.mount.get_alt_az())
         difference = np.sqrt(np.sum(((target_alt_az - mount_alt_az + 180) % 360-180) ** 2))
         if difference > 1:  # If more than 1 degree off
-            self._log_info('Slewing to target start position.')
+            self._log_info('Slewing to target start position.')            
             self._parent.slew_to_target(start_time)
         while start_time > apy_time.now():  # Wait to start
             self._log_info('Waiting for target to rise.')

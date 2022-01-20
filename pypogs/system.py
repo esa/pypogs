@@ -829,9 +829,11 @@ class System:
                         timestamp = apy_time.now()
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
+                        self._logger.debug('FOV estimate: ' + str(fov_estimate))
                         solve = t3.solve_from_image(img, fov_estimate=fov_estimate,
                                                     fov_max_error=.1)
                         self._logger.debug('TIME:  ' + timestamp.iso)
+                        self._logger.debug('Solution: ' + str(solved))
                         # Save image
                         tiff_write(self.data_folder / (start_time.strftime('%Y-%m-%dT%H%M%S')
                                                        + '_Alt' + str(alt) + '_Azi' + str(azi)
@@ -977,11 +979,6 @@ class System:
     def stop(self):
         """Stop all tasks."""
         self._logger.info('Stop command received.')
-        if self.mount is not None and self.mount.is_init:
-            try:
-                self.mount.stop()
-            except BaseException:
-                self._logger.warning('Failed to stop mount.', exc_info=True)
         try:
             self.control_loop_thread.stop()
         except BaseException:
