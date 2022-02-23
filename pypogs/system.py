@@ -38,7 +38,7 @@ from csv import writer as csv_write
 import numpy as np
 from astropy.time import Time as apy_time, TimeDelta
 from astropy import units as apy_unit, coordinates as apy_coord, utils as apy_util
-from satellite_tle import fetch_tle_from_celestrak
+from satellitetle import fetch_tle_from_celestrak
 from skyfield import sgp4lib as sgp4
 from skyfield import api as sf_api
 from tifffile import imwrite as tiff_write
@@ -1863,7 +1863,7 @@ class Target:
             tle = None
         return tle
 
-    def get_and_set_tle_from_sate_id(self, sat_id):
+    def get_and_set_tle_from_sat_id(self, sat_id):
         """Fetches TLE for a satellite specified by Satellite Catalog ID and sets TLE and target.
         
         Args:

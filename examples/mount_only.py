@@ -12,6 +12,14 @@ import pypogs
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
+# CONFIGURE GROUND STATION SITE:
+class MySite:
+  lat  =   34.2  # degrees N
+  lon  = -118.2  # degrees E
+  elev =   600   # meters above MSL
+sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+sys.alignment.set_alignment_enu()
+
 
 # ADD MOUNT:
 #sys.add_mount(model="ASCOM", identity="Simulator")
@@ -21,18 +29,18 @@ sys.add_mount(model="iOptron AZMP", identity="COM2")
 
 
 # ADD COARSE CAMERA:
+coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 #sys.add_coarse_camera(model="ASCOM", identity="Simulator")
 #sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_1")
 
 '''
-coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 sys.add_coarse_camera(
   model="ASCOM", 
   #identity="ASICamera2",
   identity="ASICamera2_2",
   #identity="Simulator",
-  exposure_time = 150,
-  gain = 400,
+  exposure_time = 200,
+  gain = 200,
   plate_scale = round(coarsePlateScale, 3),  
   binning = 2
 )
@@ -48,11 +56,11 @@ sys.add_coarse_camera(
 
 
 # SET TARGET:
-#sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544
 sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
+#sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544
 #sys.target.get_ephem(obj_id='-48', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='7', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
-#sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+#sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)  # JWST
 
 
 # START GUI:

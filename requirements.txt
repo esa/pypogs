@@ -5,3 +5,4 @@ pyserial==3.5
 scipy==1.7.1
 skyfield==1.39
 tifffile==2021.7.30
+satellitetle==0.10.1

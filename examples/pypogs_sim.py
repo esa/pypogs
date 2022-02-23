@@ -50,14 +50,14 @@ sys.add_star_camera_from_coarse()
 
 
 # ADD FINE CAMERA:
-finePlateScale = 206 * 5.86 / 2350 # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
+#finePlateScale = 206 * 5.86 / 2350 # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 #sys.add_fine_camera(model="ASCOM", identity="ASICamera2", exposure_time=500, gain=260, plate_scale=finePlateScale)
 
 
 
 # SET TARGET:
-#sys.target.get_and_set_tle_from_sate_id(23712)  # ISS = 25544
-sys.target.get_and_set_tle_from_sate_id(25544)  # ISS = 25544
+#sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544
+sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
 #sys.target.get_ephem(obj_id='-48', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='7', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)

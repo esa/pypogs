@@ -703,8 +703,8 @@ class Mount:
         self._logger.debug('Will command to alt=' + str(alt) + ' azi=' + str(azi))
         if rate_control: #Use own control thread
             self._logger.debug('Starting rate controller')
-            tolerance_deg = 0.05
-            Kp = 0.25
+            tolerance_deg = 0.1
+            Kp = 0.5
             self._control_thread_stop = False
             success = [False]
             def _loop_slew_to(alt, azi, success):
