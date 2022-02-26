@@ -38,7 +38,7 @@ from csv import writer as csv_write
 import numpy as np
 from astropy.time import Time as apy_time, TimeDelta
 from astropy import units as apy_unit, coordinates as apy_coord, utils as apy_util
-from satellitetle import fetch_tle_from_celestrak
+from satellite_tle import fetch_tle_from_celestrak
 from skyfield import sgp4lib as sgp4
 from skyfield import api as sf_api
 from tifffile import imwrite as tiff_write
