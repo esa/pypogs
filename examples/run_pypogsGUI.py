@@ -16,7 +16,7 @@ sys = pypogs.System()
 # ADD MOUNT:
 #sys.add_mount(model="ASCOM", identity="Simulator")
 #sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
-sys.add_mount(model="iOptron AZMP", identity="COM2")
+#sys.add_mount(model="iOptron AZMP", identity="COM2")
 #sys.add_mount(model="Celestron", identity="COM2")
 
 
