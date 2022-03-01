@@ -16,8 +16,16 @@ sys = pypogs.System()
 # ADD MOUNT:
 #sys.add_mount(model="ASCOM", identity="Simulator")
 #sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
-sys.add_mount(model="iOptron AZMP", identity="COM2")
+#sys.add_mount(model="iOptron AZMP", identity="COM2")
 #sys.add_mount(model="Celestron", identity="COM2")
+
+# CONFIGURE GROUND STATION SITE:
+# class MySite:
+#  lat  =  0  # degrees N
+#  lon  =  0  # degrees E
+#  elev =  500 # meters above MSL
+#sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+#sys.alignment.set_alignment_enu()
 
 
 # ADD COARSE CAMERA:

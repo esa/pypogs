@@ -2078,7 +2078,7 @@ class SpotTracker:
     def available_properties(self):
         """tuple of str: Get the available tracking parameters (e.g. gains)."""
         return ('successes_to_track', 'fails_to_drop', 'failure_sd_penalty', 'max_search_radius',
-                'min_search_radius', 'position_sigma', 'sum_sigma', 'sum_max_sd', 'sum_min_sd',
+                'min_search_radius', 'smoothing_parameter', 'position_sigma', 'sum_sigma', 'sum_max_sd', 'sum_min_sd',
                 'area_sigma', 'area_max_sd', 'area_min_sd', 'crop', 'downsample', 'filtsize',
                 'sigma_mode', 'bg_subtract_mode', 'image_sigma_th', 'image_th', 'binary_open',
                 'centroid_window', 'spot_min_sum', 'spot_max_sum', 'spot_min_area',
