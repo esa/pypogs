@@ -9,9 +9,12 @@ import sys
 sys.path.append('..')
 import pypogs
 
+# PRECONFIGURE TRACKING SETTINGS:
+#pypogs.tracking.ControlLoopThread.CCL_transition_th = 200
+#pypogs.tracking.SpotTracker.smoothing_parameter = 4
+
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
-
 
 # ADD MOUNT:
 #sys.add_mount(model="ASCOM", identity="Simulator")
@@ -65,8 +68,9 @@ sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
 
 # START GUI:
 try:
-    pypogs.GUI(sys, 500)
     #sys.do_auto_star_alignment(max_trials=2, rate_control=True, pos_list=[(40, -135), (60, -135)])
+    pypogs.GUI(sys, 500)
+    
 
 except Exception:
     raise

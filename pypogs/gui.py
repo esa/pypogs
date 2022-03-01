@@ -199,7 +199,7 @@ class ControlPropertiesFrame(ttk.Frame):
 
     def coarse_callback(self):
         try:
-            assert self.sys.coarse_track_thread is not None, 'No coarse tracker'
+            assert self.sys.coarse_track_thread is not None, 'No coarse tracker (requires mount and coarse camera).'
             if self.coarse_popup is None:
                 self.coarse_popup = self.ControlPopup(self, device=self.sys.coarse_track_thread.spot_tracker,\
                                                       title='Coarse Tracker')
@@ -212,7 +212,7 @@ class ControlPropertiesFrame(ttk.Frame):
 
     def fine_callback(self):
         try:
-            assert self.sys.fine_track_thread is not None, 'No fine tracker'
+            assert self.sys.fine_track_thread is not None, 'No fine tracker (requires mount and fine camera).'
             if self.fine_popup is None:
                 self.fine_popup = self.ControlPopup(self, device=self.sys.fine_track_thread.spot_tracker,\
                                                       title='Fine Tracker')
@@ -324,7 +324,7 @@ class TrackingControlFrame(ttk.Frame):
         self.sys = pypogs_system
         self._update_stop = True
         self._update_after = 1000
-
+        
         self._logger.debug('Creating label and buttons')
 
         ttk.Label(self, text='Tracking').pack(fill=tk.BOTH, expand=True)
@@ -381,7 +381,7 @@ class TrackingControlFrame(ttk.Frame):
 
     def coarse_callback(self):
         try:
-            assert self.sys.coarse_track_thread is not None, 'No coarse tracker'
+            assert self.sys.coarse_track_thread is not None, 'No coarse tracker (requires mount and coarse camera).'
             self.sys.coarse_track_thread.auto_acquire_track = self.auto_coarse.get()
         except Exception as err:
             self._logger.debug('Could not set coarse to auto', exc_info=True)
@@ -389,7 +389,7 @@ class TrackingControlFrame(ttk.Frame):
 
     def fine_callback(self):
         try:
-            assert self.sys.fine_track_thread is not None, 'No fine tracker'
+            assert self.sys.fine_track_thread is not None, 'No fine tracker (requires mount and fine camera).'
             self.sys.fine_track_thread.auto_acquire_track = self.auto_fine.get()
         except Exception as err:
             self._logger.debug('Could not set fine to auto', exc_info=True)
