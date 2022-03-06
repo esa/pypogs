@@ -815,7 +815,7 @@ class Camera:
                 self._log_debug('Returning '+str(val))
                 return val
         elif self.model.lower() == 'ascom':
-            self._log_debug('frame rate not supported in ASCOM')
+            self._log_debug('frame rate not supported in ASCOM camera class')
             return 0
         else:
             self._log_warning('Forbidden model string defined.')
@@ -847,6 +847,8 @@ class Camera:
                         raise AssertionError('The commanded value is outside the allowed range. See frame_rate_limit')
                     else:
                         raise #Rethrows error
+        elif self.model.lower() == 'ascom':
+            self._log_debug('frame rate not supported in ASCOM camera class')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
