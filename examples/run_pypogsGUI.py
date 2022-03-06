@@ -6,15 +6,26 @@ Run the pypogs GUI
 Run this script (i.e. type python run_pypogsGUI.py in a termnial window) to start the pypogs Graphical User Interface.
 """
 import sys
+from pathlib import Path
 sys.path.append('..')
 import pypogs
 
 # PRECONFIGURE TRACKING SETTINGS:
 #pypogs.tracking.ControlLoopThread.CCL_transition_th = 200
+"""
+  Note: Changing SpotTracker class properties affects boath coarse and fine control configurations.
+        To modify coarse and fine configurations individually, set instance (sys._coarse_track_thread.spot_tracker.*)
+        properties instead, after loading requisite hardware (mount + associated coarse or fine camera).
+"""
 #pypogs.tracking.SpotTracker.smoothing_parameter = 4
+#pypogs.tracking.SpotTracker.sigma_mode = 'global_root_square'
+#pypogs.tracking.SpotTracker.bg_subtract_mode = 'local_mean'
+#pypogs.tracking.SpotTracker.filtsize = 25
+
 
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
+
 
 # ADD MOUNT:
 #sys.add_mount(model="ASCOM", identity="Simulator")
@@ -32,18 +43,16 @@ sys = pypogs.System()
 
 
 # ADD COARSE CAMERA:
-#sys.add_coarse_camera(model="ASCOM", identity="Simulator")
-#sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_1")
-
 '''
 coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 sys.add_coarse_camera(
   model="ASCOM", 
   #identity="ASICamera2",
-  identity="ASICamera2_2",
+  #identity="ASICamera2_2",
   #identity="Simulator",
-  exposure_time = 150,
-  gain = 400,
+  identity="QHYCCD_GUIDER",
+  exposure_time = 100,
+  #gain = 400,
   plate_scale = round(coarsePlateScale, 3),  
   binning = 2
 )
@@ -56,6 +65,22 @@ sys.add_coarse_camera(
 # ADD FINE CAMERA:
 #finePlateScale = 206 * 5.86 / 2350 # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 #sys.add_fine_camera(model="ASCOM", identity="ASICamera2", exposure_time=500, gain=260, plate_scale=finePlateScale)
+
+
+# CHANGE COARSE/FINE TRACKING SETTINGS INDIVIDUALLY:
+# (MOUNT AND RESPECTIVE COARSE/FINE CAMERA MUST BE DEFINED PREVIOUSLY)
+#sys.coarse_track_thread.spot_tracker.smoothing_parameter = 4
+#sys.coarse_track_thread.spot_tracker.sigma_mode = 'global_root_square'
+#sys.coarse_track_thread.spot_tracker.bg_subtract_mode = 'local_mean'
+#sys.coarse_track_thread.spot_tracker.filtsize = 25
+
+# ENABLE SAVING IMAGES DURING TRACKING:
+# (MOUNT AND RESPECTIVE COARSE/FINE CAMERA MUST BE DEFINED PREVIOUSLY)
+#sys.coarse_track_thread.img_save_frequency = 1
+#sys.coarse_track_thread.image_folder = Path('D:\pypogs')
+#sys.fine_track_thread.img_save_frequency = 1
+#sys.fine_track_thread.image_folder = Path('D:\pypogs')
+
 
 
 # SET TARGET:
