@@ -493,7 +493,7 @@ class Camera:
                     self.parent._log_debug('Stopping ASCOM camera imaging loop')
                     self.continue_imaging = False
                     if self._is_running:
-                        self.parent._log_debug('Waiting ASCOM camera imaging loop')
+                        self.parent._log_debug('Waiting for ASCOM camera imaging loop to stop')
                         polling_period_sec = 0.05
                         while self._is_running:
                             sleep(polling_period_sec)
@@ -509,7 +509,7 @@ class Camera:
                         self.parent._ascom_camera.StartExposure(self.parent._exposure_sec,True)
                         waited_time = 0
                         timeout = self.parent._exposure_sec + 0.5
-                        polling_period_sec = 0.05
+                        polling_period_sec = 0.01
                         while not self.parent._ascom_camera.ImageReady and not waited_time >= timeout:
                             waited_time += polling_period_sec
                             sleep(polling_period_sec)
@@ -519,7 +519,7 @@ class Camera:
                         else:
                             self.parent._image_timestamp = datetime.utcnow()
                             try:
-                                img = np.asarray(self.parent._ascom_camera.ImageArray, dtype=np.uint8).T;
+                                img = np.asarray(self.parent._ascom_camera.ImageArray).T;
                                 if self.parent._flipX:
                                     img = np.fliplr(img)
                                 if self.parent._flipY:
