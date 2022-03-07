@@ -426,7 +426,7 @@ class Camera:
                                            + ' Type:' + str(self.parent._image_data.dtype))
                     for func in self.parent._call_on_image:
                         try:
-                            self.parent._log_debug('Calling back to: ' + str(func))
+                            #self.parent._log_debug('Calling back to: ' + str(func))
                             func(self.parent._image_data, self.parent._image_timestamp)
                         except:
                             self.parent._log_warning('Failed image callback', exc_info=True)
@@ -519,7 +519,7 @@ class Camera:
                         else:
                             self.parent._image_timestamp = datetime.utcnow()
                             try:
-                                img = np.asarray(self.parent._ascom_camera.ImageArray).T;
+                                img = np.asarray(self.parent._ascom_camera.ImageArray, dtype=np.uint16).T;
                                 if self.parent._flipX:
                                     img = np.fliplr(img)
                                 if self.parent._flipY:
@@ -537,7 +537,7 @@ class Camera:
                                                    + ' Type:' + str(self.parent._image_data.dtype))
                             for func in self.parent._call_on_image:
                                 try:
-                                    self.parent._log_debug('Calling back to: ' + str(func))
+                                    #self.parent._log_debug('Calling back to: ' + str(func))
                                     func(self.parent._image_data, self.parent._image_timestamp)
                                 except:
                                     self.parent._log_warning('Failed image callback', exc_info=True)
@@ -1556,6 +1556,6 @@ class Camera:
         Returns:
             numpy.ndarray: 2d array with image data.
         """
-        self._log_debug('Got latest image request')
+        #self._log_debug('Got latest image request')
         assert self.is_running, 'Camera must be running'
         return self._image_data

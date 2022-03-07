@@ -1898,12 +1898,10 @@ class TrackingThread:
 
     def _on_image_event(self, image, timestamp, *args, **kwargs):
         """PRIVATE: Method to attach as camera callback."""
-        self._log_debug('Got image event, saving')
-        self._image_data = image
-        self._image_timestamp = timestamp
-        if not self.is_running:
-            self._log_debug('Not running')
-        else:
+        if self.is_running:
+            self._log_debug('Got image event, saving')
+            self._image_data = image
+            self._image_timestamp = timestamp
             if self._process_image.is_set():
                 self._log_warning('Already processing, dropping frame.')
             else:

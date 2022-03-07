@@ -8,6 +8,7 @@
 # Personal
 *my_*
 /my_&
+*My*
 
 # System data and debug
 /pypogs/data/*

@@ -10,28 +10,9 @@ from pathlib import Path
 sys.path.append('..')
 import pypogs
 
-# PRECONFIGURE TRACKING SETTINGS:
-#pypogs.tracking.ControlLoopThread.CCL_transition_th = 200
-"""
-  Note: Changing SpotTracker class properties affects boath coarse and fine control configurations.
-        To modify coarse and fine configurations individually, set instance (sys._coarse_track_thread.spot_tracker.*)
-        properties instead, after loading requisite hardware (mount + associated coarse or fine camera).
-"""
-#pypogs.tracking.SpotTracker.smoothing_parameter = 4
-#pypogs.tracking.SpotTracker.sigma_mode = 'global_root_square'
-#pypogs.tracking.SpotTracker.bg_subtract_mode = 'local_mean'
-#pypogs.tracking.SpotTracker.filtsize = 25
-
-
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
-
-# ADD MOUNT:
-#sys.add_mount(model="ASCOM", identity="Simulator")
-#sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
-#sys.add_mount(model="iOptron AZMP", identity="COM2")
-#sys.add_mount(model="Celestron", identity="COM2")
 
 # CONFIGURE GROUND STATION SITE:
 # class MySite:
@@ -42,6 +23,19 @@ sys = pypogs.System()
 #sys.alignment.set_alignment_enu()
 
 
+# ADD MOUNT:
+'''
+sys.add_mount(
+  model="ASCOM",        identity="Simulator"
+# model="ASCOM",        identity="DeviceHub"
+# model="iOptron AZMP", identity="COM2"
+# model="Celestron",    identity="COM3"
+)
+if sys.mount is not None:
+  sys.mount.max_rate = (6, 6)
+  sys.mount.alt_limit = (-8, 80)
+'''
+
 # ADD COARSE CAMERA:
 '''
 coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
@@ -49,8 +43,8 @@ sys.add_coarse_camera(
   model="ASCOM", 
   #identity="ASICamera2",
   #identity="ASICamera2_2",
-  #identity="Simulator",
-  identity="QHYCCD_GUIDER",
+  identity="Simulator",
+  #identity="QHYCCD_GUIDER",
   exposure_time = 100,
   #gain = 400,
   plate_scale = round(coarsePlateScale, 3),  
@@ -59,7 +53,8 @@ sys.add_coarse_camera(
 '''
 
 # ADD STAR CAMERA:
-#sys.add_star_camera_from_coarse()
+#if sys.coarse_camera is not None:
+#  sys.add_star_camera_from_coarse()
 
 
 # ADD FINE CAMERA:
@@ -67,12 +62,20 @@ sys.add_coarse_camera(
 #sys.add_fine_camera(model="ASCOM", identity="ASICamera2", exposure_time=500, gain=260, plate_scale=finePlateScale)
 
 
-# CHANGE COARSE/FINE TRACKING SETTINGS INDIVIDUALLY:
+# CONFIGURE TRACKING SETTINGS (FEEDBACK PROPERTIES):
+sys.control_loop_thread.OL_speed_limit    = 7200
+sys.control_loop_thread.CCL_speed_limit   = 360
+sys.control_loop_thread.CCL_transition_th = 180
+sys.control_loop_thread.FCL_transition_th = 100
+
+# CHANGE COARSE/FINE TRACKING SETTINGS:
 # (MOUNT AND RESPECTIVE COARSE/FINE CAMERA MUST BE DEFINED PREVIOUSLY)
-#sys.coarse_track_thread.spot_tracker.smoothing_parameter = 4
-#sys.coarse_track_thread.spot_tracker.sigma_mode = 'global_root_square'
-#sys.coarse_track_thread.spot_tracker.bg_subtract_mode = 'local_mean'
-#sys.coarse_track_thread.spot_tracker.filtsize = 25
+if sys.mount is not None and sys.coarse_camera is not None:
+  sys.coarse_track_thread.spot_tracker.smoothing_parameter = 4
+  sys.coarse_track_thread.spot_tracker.sigma_mode = 'global_root_square'
+  sys.coarse_track_thread.spot_tracker.bg_subtract_mode = 'local_mean'
+  sys.coarse_track_thread.spot_tracker.filtsize = 25
+
 
 # ENABLE SAVING IMAGES DURING TRACKING:
 # (MOUNT AND RESPECTIVE COARSE/FINE CAMERA MUST BE DEFINED PREVIOUSLY)
@@ -80,8 +83,6 @@ sys.add_coarse_camera(
 #sys.coarse_track_thread.image_folder = Path('D:\pypogs')
 #sys.fine_track_thread.img_save_frequency = 1
 #sys.fine_track_thread.image_folder = Path('D:\pypogs')
-
-
 
 # SET TARGET:
 #sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544

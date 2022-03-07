@@ -32,6 +32,7 @@ from pathlib import Path
 import logging
 from threading import Thread
 from csv import writer as csv_write
+from time import sleep, time as timestamp
 
 
 # External imports:
@@ -243,6 +244,9 @@ class System:
         # Variable to stop system thread
         self._stop_loop = True
         self._thread = None
+        # Auto alignment vectors
+        self._auto_align_vectors = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45), (60, 135), (40, 135)]
+        self._auto_align_settle_time_sec = 250
         import atexit
         import weakref
         atexit.register(weakref.ref(self.__del__))
@@ -667,6 +671,24 @@ class System:
         self.fine_camera = None
 
     @property
+    def auto_align_vectors(self):
+        """Get or set reference vectors for auto alignment."""
+        return self._auto_align_vectors
+
+    @auto_align_vectors.setter
+    def auto_align_vectors(self, vectors):
+        self._auto_align_vectors = vectors
+
+    @property
+    def auto_align_settle_time_sec(self):
+        """Get or set time in milliseconds to settle after motion and before acquiring an image"""
+        return self._auto_align_settle_time_sec
+
+    @auto_align_settle_time_sec.setter
+    def auto_align_settle_time_sec(self, seconds):
+        self._auto_align_settle_time_sec = seconds
+        
+    @property
     def coarse_track_thread(self):
         """pypogs.TrackingThread: Get the coarse tracking thread."""
         return self._coarse_track_thread
@@ -775,7 +797,7 @@ class System:
         """Set the mount to None."""
         self.mount = None
 
-    def do_auto_star_alignment(self, max_trials=1, rate_control=True, pos_list=None):
+    def do_auto_star_alignment(self, max_trials=1, rate_control=True, pos_list=None, settle_time_sec=None):
         """Do the auto star alignment procedure by taking eight star images across the sky.
 
         Will call System.Alignment.set_alignment_from_observations() with the captured images.
@@ -792,11 +814,13 @@ class System:
         assert not self.is_busy, 'System is busy'
         
         if pos_list is None:
-            pos_list = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45),
-                        (60, 135), (40, 135)]
+            pos_list = self.auto_align_vectors
+        if settle_time_sec is None:
+            settle_time_sec = self.auto_align_settle_time_sec
 
         def run():
-            self._logger.info('Starting auto-alignment.')
+            self._logger.info('Starting auto-alignment with reference vectors: ' + str(pos_list))
+            print('Starting auto-alignment with reference vectors: ' + str(pos_list) + ' and settling time ' + str(settle_time_sec))
             try:
                 # TODO: tetra3 should be loaded and configurable from System.
                 t3 = Tetra3('default_database')
@@ -820,20 +844,23 @@ class System:
                                      'TRIAL'])
 
                 for idx, (alt, azi) in enumerate(pos_list):
+                    assert not self._stop_loop, 'Thread stop flag is set'
                     self._logger.info('Getting measurement at Alt: ' + str(alt)
                                       + ' Az: ' + str(azi) + '.')
                     self.mount.move_to_alt_az(alt, azi, rate_control=rate_control, block=True)
-                    for trial in range(max_trials):
+                    sleep(settle_time_sec)
+                    for trial in range(0,max_trials+1):
                         assert not self._stop_loop, 'Thread stop flag is set'
+                        print('trial ' + str(trial) + ' at Alt: ' + str(alt) + ' Az: ' + str(azi))
                         img = self.star_camera.get_next_image()
                         timestamp = apy_time.now()
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
                         self._logger.debug('FOV estimate: ' + str(fov_estimate))
-                        solve = t3.solve_from_image(img, fov_estimate=fov_estimate,
+                        solution = t3.solve_from_image(img, fov_estimate=fov_estimate,
                                                     fov_max_error=.1)
                         self._logger.debug('TIME:  ' + timestamp.iso)
-                        self._logger.debug('Solution: ' + str(solved))
+                        self._logger.debug('Solution: ' + str(solution))
                         # Save image
                         tiff_write(self.data_folder / (start_time.strftime('%Y-%m-%dT%H%M%S')
                                                        + '_Alt' + str(alt) + '_Azi' + str(azi)
@@ -841,19 +868,21 @@ class System:
                         # Save result to logfile
                         with open(data_file, 'a') as file:
                             writer = csv_write(file)
-                            data = np.hstack((solve['RA'], solve['Dec'], solve['Roll'],
-                                              solve['FOV'], solve['Prob'], timestamp.iso, alt, azi,
+                            data = np.hstack((solution['RA'], solution['Dec'], solution['Roll'],
+                                              solution['FOV'], solution['Prob'], timestamp.iso, alt, azi,
                                               trial + 1))
                             writer.writerow(data)
-                        if solve['RA'] is not None:
+                        if solution['RA'] is not None:
+                            alignment_list.append((solution['RA'], solution['Dec'], timestamp, alt, azi))
                             break
-                        elif trial + 1 < max_trials:
+                        elif trial < max_trials:
                             self._logger.debug('Failed attempt '+str(trial+1))
                         else:
                             self._logger.debug('Failed attempt '+str(trial+1)+', skipping...')
-                    alignment_list.append((solve['RA'], solve['Dec'], timestamp, alt, azi))
+                            print('failed')
+                            self._stop_loop = True
 
-                self.mount.move_home(block=False)
+                #self.mount.move_home(block=False)
                 # Set the alignment!
                 assert len(alignment_list) > 0, 'Did not identify any star patterns'
                 self.alignment.set_alignment_from_observations(alignment_list)
@@ -866,6 +895,7 @@ class System:
         self._thread = Thread(target=run)
         self._stop_loop = False
         self._thread.start()
+        
 
     def get_alt_az_of_target(self, times=None, time_step=.1):
         """Get the corrected altitude and azimuth angles and rates of the target from the current
@@ -1066,15 +1096,15 @@ class System:
                     timestamp = apy_time.now()
                     # TODO: Test
                     fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
-                    solve = t3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
+                    solution = t3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
                     self._logger.debug('TIME:  ' + timestamp.iso)
                     # Save image
                     tiff_write(self.data_folder / (test_time.strftime('%Y-%m-%dT%H%M%S') + '_Alt'
                                                    + str(alt) + '_Azi' + str(azi) + '_Try'
                                                    + str(trial + 1) + '.tiff'), img)
-                    if solve['RA'] is not None:
+                    if solution['RA'] is not None:
                         # ra,dec,time to ITRF
-                        c = apy_coord.SkyCoord(solve['RA'], solve['Dec'], obstime=timestamp,
+                        c = apy_coord.SkyCoord(solution['RA'], solution['Dec'], obstime=timestamp,
                                                unit='deg')
                         c = c.transform_to(apy_coord.ITRS)
                         xyz_observed = [c.x.value, c.y.value, c.z.value]
@@ -1093,14 +1123,14 @@ class System:
                     # Save result to logfile
                     with open(data_file, 'a') as file:
                         writer = csv_write(file)
-                        data = np.hstack((solve['RA'], solve['Dec'], solve['Roll'], solve['FOV'],
-                                          solve['Prob'], timestamp.iso, alt, azi, alt_obs, azi_obs,
+                        data = np.hstack((solution['RA'], solution['Dec'], solution['Roll'], solution['FOV'],
+                                          solution['Prob'], timestamp.iso, alt, azi, alt_obs, azi_obs,
                                           trial+1))
                         print(data)
                         writer.writerow(data)
-                    if solve['RA'] is not None:
+                    if solution['RA'] is not None:
                         break
-                    elif trial + 1 < max_trials:
+                    elif trial < max_trials:
                         print('Failed attempt '+str(trial+1))
                     else:
                         print('Failed attempt '+str(trial+1)+', skipping...')
@@ -1201,6 +1231,9 @@ class Alignment:
             self._logger.addHandler(ch)
 
         self._logger.debug('Alignment constructor called')
+        # Alignment points
+        
+        
         # Data folder setup
         self._data_folder = None
         if data_folder is None:
