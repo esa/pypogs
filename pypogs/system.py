@@ -31,7 +31,7 @@ License:
 from pathlib import Path
 import logging
 from threading import Thread
-from csv import writer as csv_write
+from csv import writer as csv_write, reader as csv_reader
 from time import sleep, time as timestamp
 
 
@@ -851,16 +851,16 @@ class System:
                     sleep(settle_time_sec)
                     for trial in range(0,max_trials+1):
                         assert not self._stop_loop, 'Thread stop flag is set'
-                        print('trial ' + str(trial) + ' at Alt: ' + str(alt) + ' Az: ' + str(azi))
+                        self._logger.info('trial ' + str(trial) + ' at Alt: ' + str(alt) + ' Az: ' + str(azi))
                         img = self.star_camera.get_new_image()
                         timestamp = apy_time.now()
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
                         self._logger.debug('FOV estimate: ' + str(fov_estimate))
-                        solution = t3.solve_from_image(img, fov_estimate=fov_estimate,
-                                                    fov_max_error=.1)
+                        solution = t3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
                         self._logger.debug('TIME:  ' + timestamp.iso)
-                        self._logger.debug('Solution: ' + str(solution))
+                        self._logger.info('Solution: ' + str(solution))
+                        #self._logger.debug('Solution: ' + str(solution))
                         # Save image
                         tiff_write(self.data_folder / (start_time.strftime('%Y-%m-%dT%H%M%S')
                                                        + '_Alt' + str(alt) + '_Azi' + str(azi)
@@ -878,8 +878,7 @@ class System:
                         elif trial < max_trials:
                             self._logger.debug('Failed attempt '+str(trial+1))
                         else:
-                            self._logger.debug('Failed attempt '+str(trial+1)+', skipping...')
-                            print('failed')
+                            self._logger.info('Failed attempt '+str(trial+1)+', skipping...')
                             self._stop_loop = True
 
                 #self.mount.move_home(block=False)
@@ -1233,6 +1232,8 @@ class Alignment:
         self._logger.debug('Alignment constructor called')
         # Alignment points
         
+        self._alignment_file_header = ['Ma', 'Mb', 'Mc', 'Alt0', 'Cvd', 'Cnp', 'Mz_std', 'My_std',
+                                'Alt0_std', 'Cvd_std', 'Cnp_std']
         
         # Data folder setup
         self._data_folder = None
@@ -1757,8 +1758,7 @@ class Alignment:
                                        + '_Alignment_from_obs.csv')
         with open(log_path, 'w') as logfile:
             logwriter = csv_write(logfile)
-            logwriter.writerow(['Ma', 'Mb', 'Mc', 'Alt0', 'Cvd', 'Cnp', 'Mz_std', 'My_std',
-                                'Alt0_std', 'Cvd_std', 'Cnp_std'])
+            logwriter.writerow(self._alignment_file_header)
             logwriter.writerow([Mx, My, Mz, alt0, Cvd, Cnp, Mz_sstd, My_sstd,
                                 alt0_sstd, Cvd_sstd, Cnp_sstd])
 
@@ -1791,6 +1791,35 @@ class Alignment:
         self._Alt0 = 0
         self._Cvd = 0
         self._Cnp = 0
+
+    def set_alignment_from_alignment_data(self, Ma, Mb, Mc, alt0=None, Cvd=None, Cnp=None):
+        self._MX_itrf2mnt = np.vstack((Ma, Mb, Mc))
+        self._MX_mnt2itrf = self._MX_itrf2mnt.transpose()
+        self._Alt0 = alt0
+        self._Cvd = Cvd
+        self._Cnp = Cnp
+        
+    def get_alignment_data_form_file(self, alignment_from_obs_filename):
+        self._logger.info('Loading alignment file: '+alignment_from_obs_filename)
+        alignment_file = open(alignment_from_obs_filename)
+        alignment_file_reader = csv_reader(alignment_file)
+        header = next(alignment_file_reader)
+        self._logger.debug('Alignment file header: ' + str(header))
+        assert header == self._alignment_file_header, 'Unrecognized CSV header: '+str(header)
+        entry = None
+        for idx, row in enumerate(alignment_file_reader):
+          if len(row)>0 and len(row[0])>0:
+            entry = row
+            break
+        assert entry is not None, 'Failed to read alignment file'+str(alignment_from_obs_filename)
+        Ma = [float(item) for item in entry[0].replace('[','').replace(']','').split()]
+        Mb = [float(item) for item in entry[1].replace('[','').replace(']','').split()]
+        Mc = [float(item) for item in entry[2].replace('[','').replace(']','').split()]
+        alt0 = float(entry[3])
+        Cvd = float(entry[4])
+        Cnp = float(entry[5])
+        self._logger.info('Loaded alignment data:'+str((Ma,Mb,Mc,alt0,Cvd,Cnp)))
+        self.set_alignment_from_alignment_data(Ma, Mb, Mc, alt0=alt0, Cvd=Cvd, Cnp=Cnp)
 
 
 class Target:

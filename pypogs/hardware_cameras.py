@@ -1529,6 +1529,7 @@ class Camera:
         Returns:
             numpy.ndarray: 2d array with image data.
         """
+        timeout = min(timeout, self.exposure_time*1000)
         self._log_debug('Got next image request')
         assert self.is_init, 'Camera must be initialised'
         if not self.is_running:
@@ -1542,10 +1543,10 @@ class Camera:
         else:
             self._log_debug('Camera running, grab the second image to show up')
             self._got_image_event.clear()
-            if not self._got_image_event.wait(timeout/2):
+            if not self._got_image_event.wait(timeout):
                 raise TimeoutError('Getting image timed out')
             self._got_image_event.clear()
-            if not self._got_image_event.wait(timeout/2):
+            if not self._got_image_event.wait(timeout):
                 raise TimeoutError('Getting image timed out')
             img = self._image_data
         return img

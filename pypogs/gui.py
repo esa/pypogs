@@ -24,6 +24,7 @@ License:
 # Standard imports:
 import tkinter as tk
 import tkinter.ttk as ttk
+from tkinter import filedialog
 from astropy.time import Time as apy_time
 from astropy.coordinates import SkyCoord
 from skyfield.sgp4lib import EarthSatellite
@@ -1348,7 +1349,7 @@ class TargetFrame(ttk.Frame):
         self.update()
         self.status_label.grid(row=2, column=0, columnspan=2)
         ttk.Button(self, text='Set Manual', command=self.manual_button_callback, width=15).grid(row=3, column=0)
-        ttk.Button(self, text='Set from File', command=self.file_button_callback, width=15).grid(row=3, column=1)
+        ttk.Button(self, text='Set from File', command=self.target_from_file_button_callback, width=15).grid(row=3, column=1)
         ttk.Button(self, text='Go To Target', command=self.go_to_target_callback).grid(row=4, column=0, columnspan=2, sticky=tk.W+tk.E)
         self.manual_popup = None
 
@@ -1393,7 +1394,7 @@ class TargetFrame(ttk.Frame):
             self._logger.debug('Could not open manual popup', exc_info=True)
             ErrorPopup(self, err, self._logger)
 
-    def file_button_callback(self):
+    def target_from_file_button_callback(self):
         try:
             raise NotImplementedError('Feature coming soon!')
         except Exception as err:
@@ -1750,7 +1751,12 @@ class AlignmentFrame(ttk.Frame):
                 ErrorPopup(self, err, self._logger)
         def load_callback(self):
             try:
-                raise NotImplementedError('Feature coming soon!')
+                filename = filedialog.askopenfilename(
+                    initialdir = self.master.sys.data_folder, 
+                    title = 'Select alignment file (*_Alignment_from_obs.csv)',
+                    filetypes = (("CSV Files","csv",),("all files","*.*"))
+                )
+                self.master.sys.alignment.get_alignment_data_form_file(filename)
             except Exception as err:
                 ErrorPopup(self, err, self._logger)
 

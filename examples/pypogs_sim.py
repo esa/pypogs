@@ -23,14 +23,18 @@ class MySite:
   elev =   600   # meters above MSL
 sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 sys.alignment.set_alignment_enu()
-#auto_align_azi = (-30, 60, 150, -120)
-#auto_align_alt = (50, 60)
+#sys.alignment.get_alignment_data_form_file('../pypogs/data/2022-03-09T050113_Alignment_from_obs.csv')
 
+
+'''
+auto_align_azi = (-30, 60, 150, -120)
+auto_align_alt = (50, 60)
 auto_align_vectors = []
 for azi in auto_align_azi:
   for alt in auto_align_alt:
     auto_align_vectors.append((alt, azi))
 sys.auto_align_vectors = auto_align_vectors
+'''
 
 # ADD MOUNT:
 sys.add_mount(model="ASCOM", identity="Simulator")

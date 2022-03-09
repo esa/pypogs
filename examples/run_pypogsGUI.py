@@ -20,7 +20,8 @@ sys = pypogs.System()
 #  lon  =  0  # degrees E
 #  elev =  500 # meters above MSL
 #sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
-#sys.alignment.set_alignment_enu()
+#sys.alignment.set_alignment_enu()   # uses mount-internal alignment model with no corrections
+#sys.alignment.get_alignment_data_form_file('../pypogs/data/2022-03-09T050113_Alignment_from_obs.csv')  # load a previous alignment solution
 
 
 # ADD MOUNT:
@@ -63,19 +64,20 @@ sys.add_coarse_camera(
 
 
 # CONFIGURE TRACKING SETTINGS (FEEDBACK PROPERTIES):
-sys.control_loop_thread.OL_speed_limit    = 7200
-sys.control_loop_thread.CCL_speed_limit   = 360
-sys.control_loop_thread.CCL_transition_th = 180
-sys.control_loop_thread.FCL_transition_th = 100
+#sys.control_loop_thread.OL_speed_limit    = 7200
+#sys.control_loop_thread.CCL_speed_limit   = 360
+#sys.control_loop_thread.CCL_transition_th = 180
+#sys.control_loop_thread.FCL_transition_th = 100
 
 # CHANGE COARSE/FINE TRACKING SETTINGS:
 # (MOUNT AND RESPECTIVE COARSE/FINE CAMERA MUST BE DEFINED PREVIOUSLY)
+'''
 if sys.mount is not None and sys.coarse_camera is not None:
   sys.coarse_track_thread.spot_tracker.smoothing_parameter = 4
   sys.coarse_track_thread.spot_tracker.sigma_mode = 'global_root_square'
   sys.coarse_track_thread.spot_tracker.bg_subtract_mode = 'local_mean'
   sys.coarse_track_thread.spot_tracker.filtsize = 25
-
+'''
 
 # ENABLE SAVING IMAGES DURING TRACKING:
 # (MOUNT AND RESPECTIVE COARSE/FINE CAMERA MUST BE DEFINED PREVIOUSLY)
