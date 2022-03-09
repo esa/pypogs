@@ -852,7 +852,7 @@ class System:
                     for trial in range(0,max_trials+1):
                         assert not self._stop_loop, 'Thread stop flag is set'
                         print('trial ' + str(trial) + ' at Alt: ' + str(alt) + ' Az: ' + str(azi))
-                        img = self.star_camera.get_next_image()
+                        img = self.star_camera.get_new_image()
                         timestamp = apy_time.now()
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
