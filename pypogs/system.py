@@ -250,7 +250,7 @@ class System:
         self._thread = None
         # Auto alignment vectors
         self._auto_align_vectors = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45), (60, 135), (40, 135)]
-        self._auto_align_settle_time_sec = 250
+        self._auto_align_settle_time_sec = 1
         import atexit
         import weakref
         atexit.register(weakref.ref(self.__del__))
@@ -862,11 +862,14 @@ class System:
                     writer.writerow(['RA', 'DEC', 'ROLL', 'FOV', 'PROB', 'TIME', 'ALT', 'AZI',
                                      'TRIAL'])
 
+                failure_count = 0
+                                     
                 for idx, (alt, azi) in enumerate(pos_list):
                     assert not self._stop_loop, 'Thread stop flag is set'
                     self._logger.info('Getting measurement at Alt: ' + str(alt)
                                       + ' Az: ' + str(azi) + '.')
                     self.mount.move_to_alt_az(alt, azi, rate_control=rate_control, block=True)
+                    self._logger.info('Waiting '+str(settle_time_sec)+' seconds for mount to settle.')
                     sleep(settle_time_sec)
                     for trial in range(0,max_trials+1):
                         assert not self._stop_loop, 'Thread stop flag is set'
@@ -898,7 +901,10 @@ class System:
                             self._logger.debug('Failed attempt '+str(trial+1))
                         else:
                             self._logger.info('Failed attempt '+str(trial+1)+', skipping...')
-                            #self._stop_loop = True
+                            failure_count += 1
+                            if failure_count >= 4:
+                                self._logger.warning('Failed to solve at 4 positions. Stopping auto-alignment.', exc_info=True)
+                                self._stop_loop = True
 
                 #self.mount.move_home(block=False)
                 # Set the alignment!
