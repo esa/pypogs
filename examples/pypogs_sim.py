@@ -5,7 +5,7 @@ Run the pypogs GUI
 
 Run this script (i.e. type python run_pypogsGUI.py in a termnial window) to start the pypogs Graphical User Interface.
 """
-import sys
+import sys, pathlib
 sys.path.append('..')
 import pypogs
 
@@ -15,6 +15,12 @@ open('../pypogs/debug/gui.txt', 'w').close()
 
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
+
+
+# Set custom tetra3 database:
+#sys.tetra3.load_database('my_custom_tetra3_database')  # If my_custom_tetra3_database.npz is in your tetra3 installation directory
+#sys.tetra3.load_database(pathlib.Path('my_custom_tetra3_database.npz'))  # If my_custom_tetra3_database.npz is in current working directory
+
 
 # CONFIGURE GROUND STATION SITE:
 class MySite:

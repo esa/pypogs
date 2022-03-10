@@ -674,7 +674,7 @@ class Mount:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
 
-    def move_to_alt_az(self, alt, azi, block=True, rate_control=True):
+    def move_to_alt_az(self, alt, azi, block=True, rate_control=True, tolerance_deg=0.1):
         """Move the mount to the given position. Must be initialised.
 
         Args:
@@ -702,8 +702,7 @@ class Mount:
             self._azmp_change_mode('special')
         self._logger.debug('Will command to alt=' + str(alt) + ' azi=' + str(azi))
         if rate_control: #Use own control thread
-            self._logger.debug('Starting rate controller')
-            tolerance_deg = 0.1
+            self._logger.debug('Starting rate controller')            
             Kp = 0.5
             self._control_thread_stop = False
             success = [False]
