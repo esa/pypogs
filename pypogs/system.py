@@ -898,7 +898,7 @@ class System:
                             self._logger.debug('Failed attempt '+str(trial+1))
                         else:
                             self._logger.info('Failed attempt '+str(trial+1)+', skipping...')
-                            self._stop_loop = True
+                            #self._stop_loop = True
 
                 #self.mount.move_home(block=False)
                 # Set the alignment!
