@@ -134,7 +134,9 @@ class System:
         :attr:`alignment` references the :class:`pypogs.Alignment` instance (auto created) used to
         determine and calibrate the location, alignment, and mount corrections. See the class
         documentation for how to set location and alignments. To do auto-alignment, use the
-        :meth:`do_auto_star_alignment` method (requires a star camera).
+        :meth:`do_auto_star_alignment` method (requires a star camera). Plate solving for the auto
+        alignment is performed via the tetra3 package. You can set a custom instance via
+        :attr:`tetra3`, otherwise a default instance will be created for you.
 
         If your mount has built in alignment (and/or is physically aligned to the earth) you may
         call :meth:`alignment.set_alignment_enu` to set the telescope alignment to East, North, Up
@@ -241,6 +243,8 @@ class System:
         self._default_model = {'mount': Mount._default_model, 'camera': Camera._default_model, 'receiver': Receiver._default_model}
         self._alignment = Alignment()
         self._target = Target()
+        # tetra3 instance used for plate solving
+        self._tetra3 = None
         # Variable to stop system thread
         self._stop_loop = True
         self._thread = None
@@ -796,6 +800,23 @@ class System:
     def clear_mount(self):
         """Set the mount to None."""
         self.mount = None
+        
+    @property
+    def tetra3(self):
+        """tetra3.Tetra3: Get or set the tetra3 instance used for plate solving star images. Will
+        create an instance with 'default_database' if none is set.
+        """
+        if self._tetra3 is None:
+            self._logger.debug('Loading default database tetra3')
+            self._tetra3 = Tetra3('default_database')
+        return self._tetra3
+    
+    @tetra3.setter
+    def tetra3(self, tetra3):
+        self._logger.debug('Got set tetra3 instance with' + str(tetra3))
+        assert isinstance(tetra3, Tetra3), 'Must be tetra3 instance'
+        self._tetra3 = tetra3
+        delf._logger.debug('Set tetra3 instace')
 
     def do_auto_star_alignment(self, max_trials=1, rate_control=True, pos_list=None, settle_time_sec=None):
         """Do the auto star alignment procedure by taking eight star images across the sky.
@@ -822,8 +843,6 @@ class System:
             self._logger.info('Starting auto-alignment with reference vectors: ' + str(pos_list))
             print('Starting auto-alignment with reference vectors: ' + str(pos_list) + ' and settling time ' + str(settle_time_sec))
             try:
-                # TODO: tetra3 should be loaded and configurable from System.
-                t3 = Tetra3('default_database')
                 alignment_list = []
                 start_time = apy_time.now()
                 # Create logfile
@@ -857,7 +876,7 @@ class System:
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
                         self._logger.debug('FOV estimate: ' + str(fov_estimate))
-                        solution = t3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
+                        solution = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
                         self._logger.debug('TIME:  ' + timestamp.iso)
                         self._logger.info('Solution: ' + str(solution))
                         #self._logger.debug('Solution: ' + str(solution))
@@ -1043,9 +1062,6 @@ class System:
         assert self.is_init, 'System not initialized'
         assert not self.is_busy, 'System is busy'
 
-        # TODO: Thread and test this one
-        # TODO: t3 loded and set up from System
-        t3 = Tetra3('default_database')
         self._logger.info('Starting alignment test, 2x20 positions.')
         pos_LH = [(53, -16), (71, -23), (80, -9), (44, -114), (56, -135), (50, -100), (65, -65),
                   (26, -72), (23, -30), (59, -37), (35, -177), (47, -142), (20, -86), (38, -79),
@@ -1095,7 +1111,7 @@ class System:
                     timestamp = apy_time.now()
                     # TODO: Test
                     fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
-                    solution = t3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
+                    solution = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
                     self._logger.debug('TIME:  ' + timestamp.iso)
                     # Save image
                     tiff_write(self.data_folder / (test_time.strftime('%Y-%m-%dT%H%M%S') + '_Alt'
