@@ -21,3 +21,10 @@
 
 # Settings
 /setup.cfg
+
+# Exclude custom tetra3 databases (except default_database.npz)
+*.npz                  
+!default_database.npz
+
+#Exclude tetra3 source database files (tyc_main.dat, hip_main.dat)
+*.dat                  
