@@ -1253,7 +1253,7 @@ class Mount:
         if return_bytes:
             self._logger.info('WARNING: dumping serial data: "%s"' % return_bytes.decode('ASCII'))
         
-    def _serial_read_bytes(self, nbytes, serial_port=None, timeout=0.4):
+    def _serial_read_bytes(self, nbytes, serial_port=None, timeout=1):
         """PRIVATE: Read specified number of bytes. Return bytes."""
         # Read from mount until EOL character. Return as type 'bytes'
         serial_port = serial_port or self._serial_port
@@ -1270,19 +1270,24 @@ class Mount:
         self._logger.debug('Got: "%s"' % str(return_bytes))
         return return_bytes        
 
-    def _serial_read_to_eol(self, eol_char, serial_port=None, timeout=0.6):
+    def _serial_read_to_eol(self, eol_char, serial_port=None, timeout=2):
         """PRIVATE: Read response to the EOL character. Return bytes."""
         # Read from mount until EOL character. Return as type 'bytes'
         serial_port = serial_port or self._serial_port
         eol_char = eol_char.encode('UTF-8')
         assert serial_port is not None and self._serial_is_init, 'Serial port is not initialized'
+        timeout_time = timestamp() + timeout
         response = b'' #Empty type 'bytes'
-        while True:
+        while timestamp() < timeout_time:
             r = serial_port.read(1)
-            if r:
+            if True:
                 if r == eol_char:
                     #self._logger.debug('Read from mount: '+str(response))
                     break
                 else:
                     response += r
+            if timestamp() > timeout_time:
+                self._logger.debug('timed out waiting for serial response')
+                break
+            sleep(0.0001)
         return response
