@@ -776,7 +776,7 @@ class System:
         return self._tetra3
     
     @tetra3.setter
-    def tetra3(self, tetra3)
+    def tetra3(self, tetra3):
         self._logger.debug('Got set tetra3 instance with' + str(tetra3))
         assert isinstance(tetra3, Tetra3), 'Must be tetra3 instance'
         self._tetra3 = tetra3
