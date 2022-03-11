@@ -476,7 +476,7 @@ class System:
             self._star_cam = cam
         self._logger.debug('Star camera set to: ' + str(self.star_camera))
 
-    def add_star_camera(self, model=None, identity=None, name='StarCamera', auto_init=True):
+    def add_star_camera(self, model=None, identity=None, name='StarCamera', auto_init=True, **properties):        
         """Create and set the star camera. Calls pypogs.Camera constructor with
         name='StarCamera' and the given arguments.
 
@@ -504,7 +504,7 @@ class System:
                 self.star_camera = None
                 self._logger.debug('Create new camera')
                 self.star_camera = Camera(model=model, identity=identity, name=name,
-                                          auto_init=auto_init)
+                                        auto_init=auto_init, properties=properties)
         else:
             self._logger.debug('Dont have anything old to clean up, create new camera')
             self.star_camera = Camera(model=model, identity=identity, name=name,
