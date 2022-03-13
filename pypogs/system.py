@@ -248,7 +248,8 @@ class System:
         # Variable to stop system thread
         self._stop_loop = True
         self._thread = None
-        # Auto alignment vectors
+        # Auto alignment settings
+        self._auto_align_tolerate_failures = 3
         self._auto_align_vectors = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45), (60, 135), (40, 135)]
         self._auto_align_settle_time_sec = 1
         import atexit
@@ -802,6 +803,16 @@ class System:
         self.mount = None
         
     @property
+    def auto_align_tolerate_failures(self):
+        """Get or set number of failures to tolerate during auto alignment.        
+        """
+        return self._auto_align_tolerate_failures
+        
+    @auto_align_tolerate_failures.setter
+    def auto_align_tolerate_failures(self, failure_count):
+        self._auto_align_tolerate_failures = failure_count
+        
+    @property
     def tetra3(self):
         """tetra3.Tetra3: Get or set the tetra3 instance used for plate solving star images. Will
         create an instance with 'default_database' if none is set.
@@ -879,7 +890,14 @@ class System:
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
                         self._logger.debug('FOV estimate: ' + str(fov_estimate))
-                        solution = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
+                        solution = self.tetra3.solve_from_image(img, 
+                            fov_estimate=fov_estimate, 
+                            sigma=4, 
+                            filtsize=21, 
+                            sigma_mode='global_root_square', 
+                            pattern_checking_stars=10,
+                            fov_max_error=1,  # deg
+                        )
                         self._logger.debug('TIME:  ' + timestamp.iso)
                         self._logger.info('Solution: ' + str(solution))
                         #self._logger.debug('Solution: ' + str(solution))
@@ -902,8 +920,8 @@ class System:
                         else:
                             self._logger.info('Failed attempt '+str(trial+1)+', skipping...')
                             failure_count += 1
-                            if failure_count >= 4:
-                                self._logger.warning('Failed to solve at 4 positions. Stopping auto-alignment.', exc_info=True)
+                            if failure_count > self._auto_align_tolerate_failures:
+                                self._logger.warning('Failed to solve at '+str(failure_count)+' positions. Stopping auto-alignment.', exc_info=True)
                                 self._stop_loop = True
 
                 #self.mount.move_home(block=False)
