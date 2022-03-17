@@ -879,7 +879,7 @@ class System:
                     assert not self._stop_loop, 'Thread stop flag is set'
                     self._logger.info('Getting measurement at Alt: ' + str(alt)
                                       + ' Az: ' + str(azi) + '.')
-                    self.mount.move_to_alt_az(alt, azi, rate_control=rate_control, block=True)
+                    self.mount.move_to_alt_az(alt, azi, rate_control=rate_control, tolerance_deg=0.01, block=True)
                     self._logger.info('Waiting '+str(settle_time_sec)+' seconds for mount to settle.')
                     sleep(settle_time_sec)
                     for trial in range(0,max_trials+1):
@@ -1031,7 +1031,7 @@ class System:
         else:
             alt_azi = self.get_alt_az_of_target(time[0])[0]
 
-        self.mount.move_to_alt_az(alt_azi[0], alt_azi[1], block=block)
+        self.mount.move_to_alt_az(alt_azi[0], alt_azi[1], tolerance_deg=5, block=block)
 
     def start_tracking(self):
         """Track the target, using closed loop feedback if defined.
