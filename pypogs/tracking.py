@@ -754,14 +754,15 @@ class ControlLoopThread:
         difference = (target_alt_az - mount_alt_az + 180) % 360 - 180
         difference_norm = np.sqrt(np.sum( difference ** 2))
         if difference_norm > 5:  # If more than 5 degrees off
-            time_to_slew_to_current_target_position = min(
+            time_to_slew_each_axis_to_current_target_position = np.array((
                 abs(difference[0]) / self._parent.mount.max_rate[0],
                 abs(difference[1]) / self._parent.mount.max_rate[1]
-            )
-            print('angular distance to target:',difference)
-            print('time to slew each axis:',(difference[0] / self._parent.mount.max_rate[0], difference[1] / self._parent.mount.max_rate[1]))
-            print('time_to_slew_to_current_target_position',time_to_slew_to_current_target_position)
-            self._log_info('Slewing to projected target position.')
+            ))
+            time_to_slew_to_current_target_position = np.max(time_to_slew_each_axis_to_current_target_position)
+            self._log_info('angular distance to target: '+str(difference))
+            self._log_info('time to slew each axis: '+str(time_to_slew_each_axis_to_current_target_position))
+            self._log_info('time to slew:'+str(time_to_slew_to_current_target_position))
+            self._log_info('Slewing to projected target position '+str(time_to_slew_to_current_target_position)+' seconds from now')
             self._parent.slew_to_target(start_time + time_to_slew_to_current_target_position)
         while start_time > apy_time.now():  # Wait to start
             self._log_info('Waiting for target to rise.')
