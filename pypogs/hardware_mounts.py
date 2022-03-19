@@ -601,7 +601,7 @@ class Mount:
         self._logger.debug('De-initialising')
         assert self.is_init, 'Not initialised'
         try:
-            self._logger.debug('Stopping mount')
+            #self._logger.debug('Stopping mount')
             self.stop()
         except:
             self._logger.debug('Did not stop', exc_info=True)

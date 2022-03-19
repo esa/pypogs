@@ -39,7 +39,7 @@ from datetime import datetime
 from csv import writer as csv_write
 
 # External imports:
-from astropy.time import Time as apy_time
+from astropy.time import Time as apy_time, TimeDelta as apy_time_delta
 from astropy import units as apy_unit
 import numpy as np
 from tifffile import imwrite as tiff_write
@@ -754,16 +754,16 @@ class ControlLoopThread:
         difference = (target_alt_az - mount_alt_az + 180) % 360 - 180
         difference_norm = np.sqrt(np.sum( difference ** 2))
         if difference_norm > 5:  # If more than 5 degrees off
-            time_to_slew_each_axis_to_current_target_position = np.array((
+            seconds_to_slew_each_axis_to_current_target_position = np.array((
                 abs(difference[0]) / self._parent.mount.max_rate[0],
                 abs(difference[1]) / self._parent.mount.max_rate[1]
             ))
-            time_to_slew_to_current_target_position = np.max(time_to_slew_each_axis_to_current_target_position)
-            self._log_info('angular distance to target: '+str(difference))
-            self._log_info('time to slew each axis: '+str(time_to_slew_each_axis_to_current_target_position))
-            self._log_info('time to slew:'+str(time_to_slew_to_current_target_position))
-            self._log_info('Slewing to projected target position '+str(time_to_slew_to_current_target_position)+' seconds from now')
-            self._parent.slew_to_target(start_time + time_to_slew_to_current_target_position)
+            seconds_to_slew_to_current_target_position = apy_time_delta(np.max(seconds_to_slew_each_axis_to_current_target_position), format='sec')
+            self._log_info('angular distance to target: '+str(difference)+' deg')
+            self._log_info('time to slew each axis: '+str(seconds_to_slew_each_axis_to_current_target_position))
+            self._log_info('time to slew: '+str(seconds_to_slew_to_current_target_position))
+            self._log_info('Slewing to projected target position '+str(seconds_to_slew_to_current_target_position)+' seconds from now')
+            self._parent.slew_to_target(start_time + seconds_to_slew_to_current_target_position)
         while start_time > apy_time.now():  # Wait to start
             self._log_info('Waiting for target to rise.')
             sleep(min(10, (start_time - apy_time.now()).sec))
