@@ -130,7 +130,9 @@ class System:
         documentation for how to set location and alignments. To do auto-alignment, use the
         :meth:`do_auto_star_alignment` method (requires a star camera). Plate solving for the auto
         alignment is performed via the tetra3 package. You can set a custom instance via
-        :attr:`tetra3`, otherwise a default instance will be created for you.
+        :attr:`tetra3`, otherwise a default instance will be created for you. The parameters used
+        in tetra3 can also be set with :attr:`tetra3_parameters`, by default the star camera fov
+        will be calculated from the plate scale and a maximum fov error of 10% is used.
 
         If your mount has built in alignment (and/or is physically aligned to the earth) you may
         call :meth:`alignment.set_alignment_enu` to set the telescope alignment to East, North, Up
