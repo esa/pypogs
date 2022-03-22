@@ -231,6 +231,7 @@ class System:
         self._target = Target()
         # tetra3 instance used for plate solving
         self._tetra3 = None
+        self._tetra3_parameters = {}
         # Variable to stop system thread
         self._stop_loop = True
         self._thread = None
@@ -781,6 +782,17 @@ class System:
         assert isinstance(tetra3, Tetra3), 'Must be tetra3 instance'
         self._tetra3 = tetra3
         delf._logger.debug('Set tetra3 instace')
+        
+    @property
+    def tetra3_parameters(self):
+        """dict: Get or set the tetra3 extraction parameters sent when Tetra3 is called. You can
+        easily add a parameter as e.g. sys.tetra3_parameters['pattern_checking_stars'] = 8, or set
+        a whole dictionary with parameters."""
+        return self._tetra3_parameters
+
+    @tetra3_parameters.setter
+    def tetra3_parameters(self, dict):
+        self._tetra3_parameters = dict
 
     def do_auto_star_alignment(self, max_trials=1, rate_control=True):
         """Do the auto star alignment procedure by taking eight star images across the sky.
@@ -832,8 +844,14 @@ class System:
                         timestamp = apy_time.now()
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
-                        solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate,
-                                                             fov_max_error=.1)
+                        # Get user tetra3 parameters, and add defaults if necessary
+                        params = self.tetra3_parameters.copy()
+                        if not params.has_key('fov_estimate'):
+                            params['fov_estimate'] = fov_estimate
+                        if not params.has_key('fov_max_error'):
+                            params['fov_max_error'] = .1 * fov_estimate
+                                
+                        solve = self.tetra3.solve_from_image(img, **params)
                         self._logger.debug('TIME:  ' + timestamp.iso)
                         # Save image
                         tiff_write(self.data_folder / (start_time.strftime('%Y-%m-%dT%H%M%S')
@@ -1058,7 +1076,14 @@ class System:
                     timestamp = apy_time.now()
                     # TODO: Test
                     fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
-                    solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate,                                     fov_max_error=.1)
+                    # Get user tetra3 parameters, and add defaults if necessary
+                    params = self.tetra3_parameters.copy()
+                    if not params.has_key('fov_estimate'):
+                        params['fov_estimate'] = fov_estimate
+                    if not params.has_key('fov_max_error'):
+                        params['fov_max_error'] = .1 * fov_estimate
+                            
+                    solve = self.tetra3.solve_from_image(img, **params)
                     self._logger.debug('TIME:  ' + timestamp.iso)
                     # Save image
                     tiff_write(self.data_folder / (test_time.strftime('%Y-%m-%dT%H%M%S') + '_Alt'
