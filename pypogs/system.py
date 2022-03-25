@@ -33,7 +33,7 @@ import logging
 from threading import Thread
 from csv import writer as csv_write, reader as csv_reader
 from time import sleep, time as timestamp
-
+import socket, struct, math
 
 # External imports:
 import numpy as np
@@ -235,6 +235,7 @@ class System:
         self._coarse_track_thread = None
         self._fine_track_thread = None
         self._control_loop_thread = ControlLoopThread(self)  # Create the control loop thread
+        self._telescope_server = TelescopeServer(self)
         # Hardware not managed by threads
         self._star_cam = None
         self._receiver = None
@@ -327,6 +328,16 @@ class System:
     def deinitialize(self):
         """Deinitialise camera, mount, and receiver if they are initialised."""
         self._logger.debug('Deinitialise called')
+        if self.telescope_server is not None:
+            self._logger.debug('Has telescope server')
+            if self.telescope_server.is_init:
+                try:
+                    self.telescope_server.stop()
+                    self._logger.debug('Deinitialized')
+                except BaseException:
+                    self._logger.warning('Failed to deinit', exc_info=True)
+            else:
+                self._logger.debug('Not initialised')
         if self.star_camera is not None:
             self._logger.debug('Has star cam')
             if self.star_camera.is_init:
@@ -446,6 +457,11 @@ class System:
         return self._control_loop_thread
 
     @property
+    def telescope_server(self):
+        """System.ControlLoopThread: Get the system control loop thread."""
+        return self._telescope_server
+        
+    @property
     def alignment(self):
         """pypogs.Alignment: Get the system alignment object."""
         return self._alignment
@@ -509,7 +525,7 @@ class System:
         else:
             self._logger.debug('Dont have anything old to clean up, create new camera')
             self.star_camera = Camera(model=model, identity=identity, name=name,
-                                      auto_init=auto_init)
+                                      auto_init=auto_init, properties=properties)
         return self.star_camera
 
     def add_star_camera_from_coarse(self):
@@ -1889,7 +1905,7 @@ class Target:
     _allowed_types = (apy_coord.SkyCoord, sgp4.EarthSatellite, Ephem)
 
     def __init__(self):
-        """Create Alignment instance. See class documentation."""
+        """Create Target instance. See class documentation."""
         self._target = None
         self._source = None
         self._rise_time = None
@@ -1961,7 +1977,7 @@ class Target:
         try:
             tle_from_celestrak = fetch_tle_from_celestrak(sat_id)
             tle = (tle_from_celestrak[1], tle_from_celestrak[2], tle_from_celestrak[0]) #reorder
-        except:
+        except IndexError:
             tle = None
         return tle
 
@@ -2111,3 +2127,175 @@ class Target:
             itrf_xyz = (self._target.ITRF_position_velocity_error(ts_time)[0]
                         * apy_unit.au.in_units(apy_unit.m))
             return itrf_xyz
+
+            
+class TelescopeServer:
+    """TelescopeServer creates a telescope telemetry and control daemon to 
+    serve telescope position data to Stellarium and receives slew commands.
+    
+    The default hosted server address is localhost (127.0.0.1) port 10001.
+    
+    See Stellarium documentation for instructions for how to connect to this
+    telescope interface as "External software or remote computer".
+    
+    The TelescopeServer thread manages TCP connections
+    """
+    def __init__(self, parent, address='127.0.0.1', port=10001, poll_period=0.5, debug_folder=None):
+        """Create Server instance. See class documentation."""
+        self._address     = address
+        self._port        = port
+        self._poll_period = poll_period # sec
+        
+        self.parent      = parent
+        
+        # Logger setup
+        self._debug_folder = None
+        if debug_folder is None:
+            self.debug_folder = Path(__file__).parent / 'debug'
+        else:
+            self.debug_folder = debug_folder
+        self._logger = logging.getLogger('pypogs.system.Server')
+        if not self._logger.hasHandlers():
+            # Add new handlers to the logger if there are none
+            self._logger.setLevel(logging.DEBUG)
+            # Console handler at INFO level
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.INFO)
+            # File handler at DEBUG level
+            fh = logging.FileHandler(self.debug_folder / 'pypogs.txt')
+            fh.setLevel(logging.DEBUG)
+            # Format and add
+            formatter = logging.Formatter('%(asctime)s:%(name)s-%(levelname)s: %(message)s')
+            fh.setFormatter(formatter)
+            ch.setFormatter(formatter)
+            self._logger.addHandler(fh)
+            self._logger.addHandler(ch)
+
+        # Start of constructor
+        self._logger.debug('System constructor called')
+        self._thread    = None
+        self._stop_loop = False
+        self._is_init   = False
+        
+    @property
+    def is_init(self):
+        """Indicate whether this thread is active"""
+        return self._is_init
+        
+    @property
+    def address(self):
+        """This server address"""
+        return self._address
+
+    @address.setter
+    def address(self, address):
+        self._address = address
+        
+    @property
+    def port(self):
+        """Server port"""
+        return self._port
+
+    @port.setter
+    def port(self, port):
+        self._port = port
+        
+    def start(self, address='127.0.0.1', port=10001, poll_period=0.5, debug_folder=None):
+        self._address     = address
+        self._port        = port
+        self._poll_period = poll_period # sec
+        self._thread      = None
+    
+        def run():
+            if self.parent.mount.model == 'ASCOM':  
+                import pythoncom
+                pythoncom.CoInitialize()
+        
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((self._address, self._port))
+                s.settimeout(0.5)
+                
+                # WAITING FOR CONNECTION LOOP
+                s.listen()
+                self._logger.info('Listening for connection on %s port %i' % (self._address, self._port))
+                while not self._stop_loop and self.parent.is_init:
+                    try:
+                        conn, addr = s.accept()
+                        conn.settimeout(self._poll_period)
+                        
+                        # CONNECTED LOOP
+                        self._logger.info('New connection from %s:%d' % addr)
+                        while not self._stop_loop and self.parent.is_init:
+                            if self.parent.mount.is_init:
+                                try:
+                                    data = conn.recv(1024)
+                                    if data:
+                                        #print('Received',len(data),'bytes:',data)
+                                        ra_raw  = int.from_bytes(data[12:16], byteorder='little', signed=False)
+                                        dec_raw = int.from_bytes(data[16:20], byteorder='little', signed=True)
+                                        ra_goal = float(ra_raw)*180/2147483648  # deg
+                                        dec_goal = float(dec_raw)*90/1073741824 # deg
+                                        
+                                        # ra,dec,time to ITRF
+                                        #c = apy_coord.SkyCoord(ra_goal, dec_goal, unit='deg').transform_to(apy_coord.ITRS)
+                                        #(alt_goal, azi_goal) = self.parent.alignment.get_enu_altaz_from_itrf_xyz(
+                                        #  [c.x.value, c.y.value, c.z.value]
+                                        #)
+                                        self._logger.info('Received go-to instruction to RA: %0.5f deg, Dec: %0.5f deg' % (ra_goal, dec_goal))
+                                        if self.parent.mount.is_init:
+                                            self.parent.target.set_target_from_ra_dec(ra_goal, dec_goal)
+                                            self.parent.target.set_source('RADEC')
+                                            itrf_xyz  = self.parent.get_itrf_direction_of_target()
+                                            enu_altaz = self.parent.alignment.get_enu_altaz_from_itrf_xyz(itrf_xyz)
+                                            if not self.parent.is_busy:
+                                                try:
+                                                    self.parent.mount.move_to_alt_az(*enu_altaz, block=False)
+                                                except BaseException:
+                                                    self._logger.warning('Failed to command mount to requested coordinates.', exc_info=True)
+                                                
+                                    else:
+                                        self._logger.info('Disconnected')
+                                        self._logger.info('Listening for connection...')
+                                        break 
+                                except socket.timeout:  # (no data)
+                                    pass
+                                except KeyboardInterrupt:
+                                    self._stop_loop = True
+                                    break
+
+                                mount_alt = self.parent.mount._state_cache['alt'] 
+                                mount_azi  = self.parent.mount._state_cache['azi'] 
+                                mount_ra, mount_dec = (0, 0)
+                                icrs = apy_coord.ICRS()
+                                c = apy_coord.AltAz(
+                                  alt = mount_alt*apy_unit.deg, 
+                                  az  = mount_azi*apy_unit.deg, 
+                                  obstime = apy_time.now(),
+                                  location = self.parent.alignment._location
+                                ).transform_to(icrs)
+                                (mount_ra, mount_dec) = (c.ra.value, c.dec.value)
+                                mount_ra = (mount_ra + 360) % 360
+                                #print(mount_ra, mount_dec)
+                                position_report = struct.pack('<hhqLll', 24, 0, 0, int(mount_ra/180*2147483648), int(mount_dec/90*1073741824), 0) #ra, dec in degrees
+                                conn.send(position_report)
+                            
+                    except (socket.timeout, ConnectionResetError, ConnectionAbortedError):  # (no connection)
+                        pass
+                    except KeyboardInterrupt:
+                        self._stop_loop = True
+                        break
+    
+        self._thread = Thread(target=run)
+        self._stop_loop = False
+        self._thread.start()
+        self._is_init = True
+    
+    def stop(self):
+        self._logger.info('Stopping telescope server')
+        if self._thread is not None:
+            self._stop_loop = True
+            try:
+                self._thread.join()
+            except BaseException:
+                self._logger.warning('Failed to join system worker thread.', exc_info=True)
+    

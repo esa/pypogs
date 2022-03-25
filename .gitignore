@@ -28,3 +28,4 @@
 
 #Exclude tetra3 source database files (tyc_main.dat, hip_main.dat)
 *.dat                  
+*.pyc

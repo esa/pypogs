@@ -48,6 +48,10 @@ sys.add_mount(model="ASCOM", identity="Simulator")
 #sys.add_mount(model="iOptron AZMP", identity="COM2")
 #sys.add_mount(model="Celestron", identity="COM2")
 
+#sys.telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)  # use address 127.0.0.1 for access on this computer only
+sys.telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)  # use address 0.0.0.0 to make accessible across network
+
+
 
 # ADD COARSE CAMERA:
 coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
