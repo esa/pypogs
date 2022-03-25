@@ -415,7 +415,7 @@ class TrackingControlFrame(ttk.Frame):
 #        self.update()
 
     def start_tracking_callback(self):
-        if self.sys.mount is not None and self.sys.mount.is_init and self.sys.mount.is_sidereal_tracking:
+        if self.sys.mount is not None and self.sys.mount.is_init and self.sys.mount._is_sidereal_tracking:
             self._logger.debug('Sidereal tracking is on.  Will turn off.')
             self.sys.mount.stop_sidereal_tracking()
         try:
@@ -1536,7 +1536,8 @@ class TargetFrame(ttk.Frame):
                     self._logger.debug(tle[1])
                     self._logger.debug(tle[2])
                 else:
-                    self._logger.debug('unable to fetch TLE for sat ID ' +str(self.sat_id))
+                    self._logger.info('Failed to retrieve TLE for sat ID ' +str(self.sat_id))
+                    self.sat_name_label['text'] = '(failed)'                    
 
         def get_and_set_tle_callback(self):
             self.get_tle_callback()
@@ -1872,10 +1873,10 @@ class MountControlFrame(ttk.Frame):
         self._logger.debug('MountControlFrame got update request')
         
         if self.sys.mount is not None and self.sys.mount.is_init:
-            if self.sys.mount.is_sidereal_tracking:
+            if self.sys.mount._is_sidereal_tracking:
                 ttk.Style().configure('sidereal.TButton', background='green', foreground='green')
                 self.sidereal_button['text'] = 'Stop sidereal tracking'
-                self.sys.mount.get_alt_az()
+                #self.sys.mount.get_alt_az()
             else:
                 ttk.Style().configure('sidereal.TButton',\
                                      background=ttk.Style().lookup('TButton', 'background'), \
@@ -1951,7 +1952,7 @@ class MountControlFrame(ttk.Frame):
 
     def toggle_sidereal_tracking(self):
         self._logger.debug('Sidereal tracking button clicked')
-        if self.sys.mount.is_sidereal_tracking:
+        if self.sys.mount._is_sidereal_tracking:
             self._logger.debug('Sidereal tracking is on.  Will turn off.')            
             self.sys.mount.stop_sidereal_tracking()
         else:

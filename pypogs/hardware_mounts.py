@@ -601,7 +601,7 @@ class Mount:
         self._logger.debug('De-initialising')
         assert self.is_init, 'Not initialised'
         try:
-            #self._logger.debug('Stopping mount')
+            self._logger.debug('Stopping mount')
             self.stop()
         except:
             self._logger.debug('Did not stop', exc_info=True)
@@ -836,6 +836,7 @@ class Mount:
             self._state_cache['azi'] = azi
             return (alt, azi)
         elif self.model == 'iOptron AZMP':
+            (alt, azi) = (None, None)
             if self._azmp_command_mode == 'special':
                 # returns integer units of 0.01 arcsec
                 for attempt in (0, 1):
@@ -1001,7 +1002,7 @@ class Mount:
             if self._azmp_command_mode == 'normal':
                 self._serial_send_text_command(':ST1#')
                 assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
-                self._is_sidereal_tracking = False
+                self._is_sidereal_tracking = True
         elif self.model == 'ASCOM':
             if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
                 try:
