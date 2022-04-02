@@ -35,6 +35,7 @@ from datetime import datetime
 from threading import Thread, Event
 from struct import pack as pack_data
 
+
 # External imports:
 import numpy as np
 import serial
@@ -223,7 +224,7 @@ class Camera:
                 self._ascom_camera.Connected = False
             self._log_debug('ASCOM camera disconnected')
             self._ascom_pythoncom.CoUninitialize()
-            del(self._ascom_camera)
+            self._ascom_camera = None
         self._log_debug('ASCOM camera hardware released')
 
     @property
@@ -475,6 +476,9 @@ class Camera:
             self._ascom_camera.Connected = True
             assert self._ascom_camera.Connected, "Failed to connect to camera"
             assert self._ascom_camera is not None, 'ASCOM camera not initialized'
+            self._log_debug('ReadoutMode: '+str(self._ascom_camera.ReadoutModes[self._ascom_camera.ReadoutMode]))
+            self._log_debug('SensorType: '+str(self._ascom_camera.SensorType))
+            self._log_debug('CameraState: '+str(self._ascom_camera.CameraState))
             
             class AscomCameraImagingLoopHandler():
                 def __init__(self, parent):
@@ -494,43 +498,52 @@ class Camera:
                     self.continue_imaging = False
                     if self._is_running:
                         self.parent._log_debug('Waiting for ASCOM camera imaging loop to stop')
-                        polling_period_sec = 0.05
+                        polling_period = 0.05 #sec
                         while self._is_running:
-                            sleep(polling_period_sec)
+                            sleep(polling_period)
                         self.parent._log_debug('Stopped ASCOM camera imaging loop')
-            
+                        
                 def imaging_loop(self):
                     assert self.parent._ascom_camera, 'Cannot start imaging - ASCOM camera driver not loaded'
                     assert self.parent._ascom_camera.Connected, 'Cannot start imaging - ASCOM camera not connected'                        
                     self._is_running = True
                     self.parent._log_debug('Starting ASCOM camera imaging loop')
+                    timeout = 0.5 # sec
+                    polling_period = 0.001 # sec
                     while self.continue_imaging and self.parent._ascom_camera.Connected:
                         #self.parent._log_debug('Starting ASCOM camera exposure')
+                        # Start exposure:
                         self.parent._ascom_camera.StartExposure(self.parent._exposure_sec,True)
+                        
+                        # Wait for image to be ready:
+                        sleep(self.parent._exposure_sec * 0.95)
                         waited_time = 0
-                        timeout = self.parent._exposure_sec + 0.5
-                        polling_period_sec = 0.01
-                        while not self.parent._ascom_camera.ImageReady and not waited_time >= timeout:
-                            waited_time += polling_period_sec
-                            sleep(polling_period_sec)
+                        while not self.parent._ascom_camera.ImageReady and waited_time < timeout:
+                            sleep(polling_period)
+                            waited_time += polling_period
                         if not self.parent._ascom_camera.ImageReady:
                             self.parent._log_debug('Timed out waiting for image')
                             self.parent._log_debug('Camera connected: '+str(self.parent._ascom_camera.Connected))
-                        else:
+                            continue
+                        # Get and pre-process image:
+                        got_image = False
+                        try:
+                            img = np.array(self.parent._ascom_camera.ImageArray, dtype=np.float).copy().T
+                            if self.parent._flipX:
+                                img = np.fliplr(img)
+                            if self.parent._flipY:
+                                img = np.flipud(img)
+                            if self.parent._rot90:
+                                img = np.rot90(img, self.parent._rot90)
                             self.parent._image_timestamp = datetime.utcnow()
-                            try:
-                                img = np.asarray(self.parent._ascom_camera.ImageArray, dtype=np.uint16).T;
-                                if self.parent._flipX:
-                                    img = np.fliplr(img)
-                                if self.parent._flipY:
-                                    img = np.flipud(img)
-                                if self.parent._rot90:
-                                    img = np.rot90(img, self.parent._rot90)
-                                self.parent._image_data = img
-                            except:
-                                self.parent._log_debug('Failed to access image.')
-                                self.parent._image_data = None
-
+                            self.parent._image_data = img
+                            got_image = True
+                        except:
+                            self.parent._log_debug('Failed to access image.')
+                            self.parent._image_data = None
+                            
+                        # Signal image ready and run callbacks:
+                        if got_image:
                             self.parent._got_image_event.set()
                             self.parent._log_debug('Time: ' + str(self.parent._image_timestamp) \
                                                    + ' Size:' + str(self.parent._image_data.shape) \
@@ -542,9 +555,10 @@ class Camera:
                                 except:
                                     self.parent._log_warning('Failed image callback', exc_info=True)
                             self.parent._imgs_since_start += 1
-                            #self.parent._log_debug('ASCOM image loop finished.')
+                            
+                        #self.parent._log_debug('ASCOM image loop finished.')
                         if self.continue_imaging:
-                            sleep(0.01)
+                            sleep(0.001)
                     self._is_running = False
                     
             self._ascom_camera_imaging_handler = AscomCameraImagingLoopHandler(self)

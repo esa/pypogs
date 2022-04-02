@@ -296,7 +296,7 @@ class Mount:
             self._logger.debug('Setting identity to: '+serial_port_name)
             self._identity = serial_port_name
             
-        if self.model == 'iOptron AZMP':
+        elif self.model == 'iOptron AZMP':
             self._logger.debug('Using %s with string identity, try to open and check model' % self.model)
             serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
             r = self._serial_test(serial_port_name, test_command=':MountInfo#', nbytes=4)
@@ -516,7 +516,7 @@ class Mount:
             self._logger.debug('Ensure sidereal tracking is off.')
             self.stop_sidereal_tracking()
             self._is_init = True
-        if self.model == 'iOptron AZMP':
+        elif self.model == 'iOptron AZMP':
             assert self.identity is not None, 'Must define identity before initialising'
             self._logger.debug('Using %s, try to initialise' % self.model)
             self._logger.debug('Opening serial port '+self.identity)
@@ -610,7 +610,7 @@ class Mount:
             self._serial_port_close()
             self._is_init = False
             self._logger.info('Mount deinitialised')
-        if self.model == 'iOptron AZMP':
+        elif self.model == 'iOptron AZMP':
             if self._serial_is_init:
                 self._logger.debug('Reverting mount commanding mode to normal')
                 self._azmp_change_mode('normal')
@@ -650,7 +650,7 @@ class Mount:
             moving = not ret[0] == b'0'
             self._logger.debug('Mount returned: ' + str(ret[0]) + ', is moving: ' + str(moving))
             return moving
-        if self.model == 'iOptron AZMP':
+        elif self.model == 'iOptron AZMP':
             is_moving = False
             self._logger.debug('Using %s in %s command mode, asking if moving' % (self.model, self._azmp_command_mode))
             if self._azmp_command_mode == 'special':
@@ -698,7 +698,7 @@ class Mount:
             alt = self.degrees_to_n180_180(alt - self._alt_zero)
             alt = self.degrees_to_n180_180(alt)
             azi = self.degrees_to_n180_180(azi)
-        if self.model == 'iOptron AZMP':
+        elif self.model == 'iOptron AZMP':
             self._azmp_change_mode('special')
         self._logger.debug('Will command to alt=' + str(alt) + ' azi=' + str(azi))
         if rate_control: #Use own control thread
@@ -929,7 +929,7 @@ class Mount:
             self._logger.debug('Send successful')
             self._state_cache['alt_rate'] = alt
             self._state_cache['azi_rate'] = azi
-        if self.model == 'iOptron AZMP':
+        elif self.model == 'iOptron AZMP':
             #self._logger.debug('Using %s, sending rate command to mount' % self.model)
             if self._azmp_command_mode != 'special':
                 self._azmp_change_mode('special')
@@ -1180,6 +1180,7 @@ class Mount:
         return response
         
     def _serial_port_open(self, port_name):
+        """PRIVATE:  Opens serial port specified by port_name string."""
         try:
             baud = self._serial_baud_rate[self.model] or 9600
             self._serial_port = serial.Serial(port_name, baud, parity=serial.PARITY_NONE,\
@@ -1190,6 +1191,7 @@ class Mount:
             raise RuntimeError('Failed to connect to the mount during initialisation')
             
     def _serial_port_close(self, serial_port=None):
+        """PRIVATE:  Closes serial port."""
         if serial_port is not None:
             serial_port.close()
         else:
@@ -1198,6 +1200,13 @@ class Mount:
             self._serial_is_init = False
         
     def _serial_query(self, command, eol_char, serial_port=None):
+        """PRIVATE: Encodes and sends command string to mount, then reads and returns 
+        response string from mount ending in indicated end-of-line character.
+        inputs:
+          command (str):   command message to be sent to mount.
+          eol_char (char): expected terminating character at end of mount response.
+        returns:  ASCII string response from mount up to and including EOL char.
+        """
         serial_port = serial_port or self._serial_port
         assert serial_port is not None and self._serial_is_init, 'Serial port is not initialized'
         self._logger.debug('Sending serial command "%s" to mount' % str(command))
@@ -1244,6 +1253,7 @@ class Mount:
         return acked
 
     def _serial_dump_input_buffer(self, serial_port=None):
+        """PRIVATE: discard data in serial buffer"""
         serial_port = serial_port or self._serial_port
         assert serial_port is not None and self._serial_is_init, 'Serial port is not initialized'
         read_bytes = b''
