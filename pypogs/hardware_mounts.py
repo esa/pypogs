@@ -620,11 +620,16 @@ class Mount:
             self._logger.info('Mount deinitialised')
         elif self.model == 'ASCOM':
             self._logger.debug('Disconnecting ASCOM telescope mount')
-            self._ascom_telescope.AbortSlew()
-            self._ascom_telescope.Connected = False
+            if self._ascom_telescope is not None:
+                try:
+                    if self._ascom_telescope.Connected:
+                        self._ascom_telescope.AbortSlew()
+                    self._ascom_telescope.Connected = False
+                except:
+                    pass
             self._is_init = False
             pythoncom.CoUninitialize()
-            del(self._ascom_telescope)
+            self._ascom_telescope = None
             self._logger.info('Mount deinitialised')
         else:
             self._logger.warning('Forbidden model string defined.')
