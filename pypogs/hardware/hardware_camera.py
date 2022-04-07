@@ -29,10 +29,14 @@ from time import sleep, time as timestamp
 from datetime import datetime
 from threading import Thread, Event
 from struct import pack as pack_data
+from threading import Thread
 
 # External imports:
 import numpy as np
 import serial
+
+# Hardware support imports:
+import zwoasi
 
 class Camera:
     """Control acquisition and receive images from a camera.
@@ -76,7 +80,7 @@ class Camera:
             # Release the hardware
             cam.deinitialize()
     """
-    _supported_models = ('ptgrey',)
+    _supported_models = ('ptgrey', 'zwoasi')
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
         """Create Camera instance. See class documentation."""
@@ -92,7 +96,7 @@ class Camera:
             self._logger.setLevel(logging.DEBUG)
             # Console handler at INFO level
             ch = logging.StreamHandler()
-            ch.setLevel(logging.INFO)
+            ch.setLevel(logging.INFO)   #CHANGE MEEEEEEE
             # File handler at DEBUG level
             fh = logging.FileHandler(self.debug_folder / 'pypogs.txt')
             fh.setLevel(logging.DEBUG)
@@ -118,6 +122,10 @@ class Camera:
         self._ptgrey_camera = None
         self._ptgrey_camlist = None
         self._ptgrey_system = None
+        #Only used for zwoasi
+        self._zwoasi_camera = None
+        self._zwoasi_is_init = False
+        self._zwoasi_image_handler = None
         #Callbacks on image event
         self._call_on_image = set()
         self._got_image_event = Event()
@@ -230,7 +238,7 @@ class Camera:
         assert not self.is_init, 'Can not change already initialised device model'
         model = str(model)
         assert model.lower() in self._supported_models,\
-                                                'Model type not recognised, allowed: '+str(self._supported_models)
+                            'Model type not recognised, allowed: '+str(self._supported_models)
         #TODO: Check that the APIs are available.
         self._model = model
         self._log_debug('Model set to '+str(self.model))
@@ -240,6 +248,7 @@ class Camera:
         """str: Get or set the device and/or input. Model must be defined first.
 
         - For model *ptgrey* this is the serial number *as a string*
+        - For model *zwoasi* this is the index (starting at zero)
         - Must set before initialising the device and may not be changed for an initialised device.
         """
         return self._identity
@@ -279,6 +288,33 @@ class Camera:
                 self._ptgrey_camera = None
                 self._identity = identity
                 self._ptgrey_camlist.Clear()
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi, first load and initialise the package')
+            library_path = Path(__file__).parent.parent / '_system_data' / 'ASICamera2'
+            self._log_debug('Initialising with files at ' + str(library_path.resolve()))
+            try:
+                zwoasi.init(str(library_path.resolve()))
+            except zwoasi.ZWO_Error as e:
+                if not str(e) == 'Library already initialized':
+                    raise # Throw error if any other problem than already initialised
+            
+            self._log_debug('Library intialised, checking if identity is available')
+            identity = int(identity)
+            num_cams = zwoasi.get_num_cameras()
+            assert identity < num_cams, ('Selected identity is greater than the available cameras,'
+                                         'largest possible is one less than ' + str(num_cams))
+            # TODO: test if in use. Turns out API allows you to initialise several objects
+            # connected to the same hardware without complaining... Must keep own list?
+            
+            #self._log_debug('Identity available, testing if in use')
+            #try...
+            #self._zwoasi_camera = zwoasi.Camera(identity)
+                
+            #except...
+            
+            #finally... close
+            
+            self._identity = identity
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -291,6 +327,8 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             init = self._ptgrey_camera is not None and self._ptgrey_camera.IsInitialized()
             return init
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_is_init
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -323,7 +361,7 @@ class Camera:
             self._ptgrey_camera.AcquisitionMode.SetIntValue(PySpin.AcquisitionMode_Continuous)
             self._log_debug('Setting stream mode to newest only')
             self._ptgrey_camera.TLStream.StreamBufferHandlingMode.SetIntValue(
-                                                                        PySpin.StreamBufferHandlingMode_NewestOnly)
+                                                    PySpin.StreamBufferHandlingMode_NewestOnly)
             class PtGreyEventHandler(PySpin.ImageEventHandler):
                 """Barebones event handler for ptgrey, just pass along the event to the Camera class."""
                 def __init__(self, parent):
@@ -367,6 +405,78 @@ class Camera:
             self._ptgrey_camera.RegisterEventHandler( self._ptgrey_event_handler )
             self._log_debug('Registered ptgrey image event handler')
             self._log_info('Camera successfully initialised')
+        
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi, try to initialise')
+            self._zwoasi_camera = zwoasi.Camera(self.identity)
+            
+            # Set to normal mode and 16 bit mode by default
+            self._zwoasi_camera.set_camera_mode(zwoasi.ASI_MODE_NORMAL)
+            self._zwoasi_camera.set_image_type(zwoasi.ASI_IMG_RGB24)
+            
+            # Set everything to default to be safe
+            set_to_default = {'Exposure':zwoasi.ASI_EXPOSURE, 'Gain':zwoasi.ASI_GAIN,
+                              'Flip':zwoasi.ASI_FLIP, 'BandWidth':zwoasi.ASI_BANDWIDTHOVERLOAD,
+                              'HardwareBin':zwoasi.ASI_HARDWARE_BIN, 'WB_B':zwoasi.ASI_WB_B,
+                              'WB_R':zwoasi.ASI_WB_R, 'Offset':zwoasi.ASI_OFFSET,
+                              'HighSpeedMode':zwoasi.ASI_HIGH_SPEED_MODE, 'MonoBin':zwoasi.ASI_MONO_BIN}
+            controls = self._zwoasi_camera.get_controls()
+            for k in set_to_default.keys():
+                if k in controls: # Check that our model has this property
+                    self._zwoasi_camera.set_control_value(set_to_default[k], controls[k]['DefaultValue'])
+            
+            # Handler class to deal with the image stream
+            class ZwoAsiImageHandler():
+                """Barebones class to start/stop camera and read images"""
+                def __init__(self, parent):
+                    self.parent = parent
+                    self._thread = None
+                    self._stop_running = False
+                def start(self):
+                    self._thread = Thread(target = self._run)
+                    self._stop_running = False
+                    self._thread.start()
+                def stop(self):
+                    self._stop_running = True
+                @property
+                def is_running(self):
+                    return self._thread and self._thread.is_alive
+                def _run(self):
+                    """Start camera and continiously read out data"""
+                    cam = self.parent._zwoasi_camera
+                    cam.start_video_capture()
+                    timeout_ms = 1000 # TODO: Set to 2x exposure plus 500 ms
+                    while not self._stop_running:
+                        img = cam.capture_video_frame(timeout = timeout_ms)
+                        self.parent._log_debug('New image captured! Unpack and set image event')
+                        if self.parent._flipX:
+                            img = np.fliplr(img)
+                        if self.parent._flipY:
+                            img = np.flipud(img)
+                        if self.parent._rot90:
+                            img = np.rot90(img, self.parent._rot90)
+                        if len(img.shape) == 3:
+                            # Camera gives GRB, reverse to RGB
+                            img = img[:, :, ::-1]
+                            
+                        self.parent._image_data = img
+                        
+                        self.parent._got_image_event.set()
+                        self.parent._log_debug('Time: ' + str(self.parent._image_timestamp) \
+                                               + ' Size:' + str(self.parent._image_data.shape) \
+                                               + ' Type:' + str(self.parent._image_data.dtype))
+                        for func in self.parent._call_on_image:
+                            try:
+                                self.parent._log_debug('Calling back to: ' + str(func))
+                                func(self.parent._image_data, self.parent._image_timestamp)
+                            except:
+                                self.parent._log_warning('Failed image callback', exc_info=True)
+                        self.parent._imgs_since_start += 1
+                        self.parent._log_debug('Event handler finished.')
+
+            self._zwoasi_image_handler = ZwoAsiImageHandler(self)
+            self._zwoasi_is_init = True
+                    
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -395,6 +505,12 @@ class Camera:
                 self._log_exception('Failed to close task')
             self._log_debug('Trying to release PtGrey hardware resources')
             self._ptgrey_release()
+        if self._zwoasi_camera:
+            self._log_debug('Found zwoasi camera, deinitialising')
+            self._zwoasi_camera.close()
+            self._zwoasi_is_init = False
+            self._zwoasi_camera = None
+            self._log_debug('Closed, set deinit flag, deleted object')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -406,6 +522,8 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout', 'frame_rate_auto',\
                     'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
+        if self.model.lower() == 'zwoasi':
+            return () # UPDATE AS YOU GO
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1116,6 +1234,8 @@ class Camera:
         if not self.is_init: return False
         if self.model.lower() == 'ptgrey':
             return self._ptgrey_camera is not None and self._ptgrey_camera.IsStreaming()
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_camera is not None and self._zwoasi_image_handler.is_running
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1139,6 +1259,11 @@ class Camera:
                     self._log_warning('The camera was already streaming...')
                 else:
                     raise RuntimeError('Failed to start camera acquisition') from e
+        
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Calling start on zwoasi image handler')
+            self._zwoasi_image_handler.start()
+        
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1146,10 +1271,10 @@ class Camera:
 
     def stop(self):
         """Stop the acquisition."""
+        self._log_debug('Got stop command')
         if not self.is_running:
             self._log_info('Camera was not running, name: '+self.name)
             return
-        self._log_debug('Got stop command')
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PtGrey')
             try:
@@ -1157,6 +1282,9 @@ class Camera:
             except:
                 self._log_debug('Could not stop:', exc_info=True)
                 raise RuntimeError('Failed to stop camera acquisition')
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Calling stop on zwoasi image handler')
+            self._zwoasi_image_handler.stop()
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
