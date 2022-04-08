@@ -412,7 +412,7 @@ class Camera:
             
             # Set to normal mode and 16 bit mode by default
             self._zwoasi_camera.set_camera_mode(zwoasi.ASI_MODE_NORMAL)
-            self._zwoasi_camera.set_image_type(zwoasi.ASI_IMG_RGB24)
+            self._zwoasi_camera.set_image_type(zwoasi.ASI_IMG_RAW16)
             
             # Set everything to default to be safe
             set_to_default = {'Exposure':zwoasi.ASI_EXPOSURE, 'Gain':zwoasi.ASI_GAIN,
@@ -433,26 +433,35 @@ class Camera:
                     self._thread = None
                     self._stop_running = False
                 def start(self):
+                    self.parent._log_info('Starting zwoasi imaging thread')
                     self._thread = Thread(target = self._run)
                     self._stop_running = False
                     self._thread.start()
                 def stop(self):
+                    self.parent._log_info('Stopping zwoasi imaging thread')
                     self._stop_running = True
+                    self._thread.join()
+                    self.parent._zwoasi_camera.stop_video_capture()
+                    self.parent._log_info('zwoasi imaging thread has been stopped')
                 @property
                 def is_running(self):
-                    return self._thread and self._thread.is_alive
+                    return self._thread is not None and self._thread.is_alive()
                 def _run(self):
                     """Start camera and continiously read out data"""
                     cam = self.parent._zwoasi_camera
                     cam.start_video_capture()
-                    timeout_ms = 1000 # TODO: Set to 2x exposure plus 500 ms
+                    timeout_ms = self.parent.exposure_time + 500
                     while not self._stop_running:
-                        img = cam.capture_video_frame(timeout = timeout_ms)
+                        try:
+                            img = cam.capture_video_frame(timeout = timeout_ms)
+                        except zwoasi.ZWO_IOError as e:
+                            if str(zwoasi.ZWO_IOError) == 'Camera closed':
+                                self.parent._log_debug('zwoasi Camera closed, probably deinitialising')
+                            else:
+                                raise
+                        if self._stop_running:
+                            break
                         self.parent._log_debug('New image captured! Unpack and set image event')
-                        if self.parent._flipX:
-                            img = np.fliplr(img)
-                        if self.parent._flipY:
-                            img = np.flipud(img)
                         if self.parent._rot90:
                             img = np.rot90(img, self.parent._rot90)
                         if len(img.shape) == 3:
@@ -520,10 +529,10 @@ class Camera:
         """tuple of str: Get all the available properties (settings) supported by this device."""
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
-            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout', 'frame_rate_auto',\
-                    'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
+            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',
+                    'frame_rate_auto', 'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
         if self.model.lower() == 'zwoasi':
-            return () # UPDATE AS YOU GO
+            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',        'frame_rate_auto', 'gain', 'gain_auto', 'exposure_time') # UPDATE AS YOU GO
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -536,6 +545,9 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves: ' +str(self._flipX))
             return self._flipX
+        elif self.model.lower() == 'zwoasi':
+            flipmode = self._zwoasi_camera.get_control_value(zwoasi.ASI_FLIP)[0]
+            return (flipmode == 1) or (flipmode == 3) # mode 1 is flip horizontal, mode 3 is flip both
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -548,6 +560,21 @@ class Camera:
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves.')
             self._flipX = flip
             self._log_debug('_flipX set to: '+str(self._flipX))
+        elif self.model.lower() == 'zwoasi':
+            if not flip: # Disable horizontal flipping
+                if not self.flip_y:
+                    # No flipping
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 0)
+                else:
+                    # Set to only vertical flipping
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 2)
+            else: # Enable horizontal flipping
+                if not self.flip_y:
+                    # Flip only horizontal
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 1)
+                else:
+                    # Flip both
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 3)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -560,6 +587,9 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves: ' +str(self._flipX))
             return self._flipY
+        elif self.model.lower() == 'zwoasi':
+            flipmode = self._zwoasi_camera.get_control_value(zwoasi.ASI_FLIP)[0]
+            return (flipmode == 2) or (flipmode == 3) # mode 2 is flip vertical, mode 3 is flip both
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -572,6 +602,21 @@ class Camera:
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves.')
             self._flipY = flip
             self._log_debug('_flipY set to: '+str(self._flipY))
+        elif self.model.lower() == 'zwoasi':
+            if not flip: # Disable vertical flipping
+                if not self.flip_x:
+                    # No flipping
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 0)
+                else:
+                    # Set to only horizontal flipping
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 1)
+            else: # Enable vertical flipping
+                if not self.flip_x:
+                    # Flip only vertical
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 2)
+                else:
+                    # Flip both
+                    self._zwoasi_camera.set_control_value(zwoasi.ASI_FLIP, 3)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -581,7 +626,7 @@ class Camera:
         """int: Get or set how many times the image should be rotated by 90 degrees. Applied *after* flip_x and flip_y.
         """
         assert self.is_init, 'Camera must be initialised'
-        if self.model.lower() == 'ptgrey':
+        if self.model.lower() in ('ptgrey', 'zwoasi'):
             return self._rot90
         else:
             self._log_warning('Forbidden model string defined.')
@@ -591,8 +636,8 @@ class Camera:
         self._log_debug('Set rot90 called with: '+str(k))
         assert self.is_init, 'Camera must be initialised'
         k = int(k)
-        if self.model.lower() == 'ptgrey':
-            self._log_debug('Using PtGrey camera. Will rotate the received image array ourselves.')
+        if self.model.lower() in ('ptgrey', 'zwoasi'):
+            self._log_debug('Using PtGrey or ZwoAsi camera. Will rotate the received image array ourselves.')
             self._rot90 = k
             self._log_debug('rot90 set to: '+str(self._rot90))
         else:
@@ -645,6 +690,8 @@ class Camera:
                 val = node.GetValue()
                 self._log_debug('Returning not '+str(val))
                 return not val
+        elif self.model.lower() == 'zwoasi':
+            return True # Only auto frame rate available in normal mode
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -666,6 +713,10 @@ class Camera:
             else:
                 self._log_debug('Setting frame rate')
                 node.SetValue(not auto)
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi')
+            if not auto:
+                self._log_warning('zwoasi does not support fixed frame rate, staying in auto mode.')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -773,6 +824,8 @@ class Camera:
                 else:
                     self._log_debug('Unexpected return value')
                     raise RuntimeError('Unknow response from camera')
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_camera.get_control_value(zwoasi.ASI_GAIN)[1]
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -799,13 +852,25 @@ class Camera:
             else:
                 self._log_debug('Setting gain')
                 node.SetIntValue(node.GetEntryByName(set_to).GetValue())
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi')
+            if not self.gain_auto == auto:
+                self._log_debug('Changing gain auto mode to: ' + str(auto))
+                controls = self._zwoasi_camera.get_controls()
+                default = controls['Gain']['DefaultValue']
+                self._log_debug('Setting gain to auto ' + str(auto) + ' and default: ' + str(default))
+                self._zwoasi_camera.set_control_value(zwoasi.ASI_GAIN, default, auto)
+                self._log_debug('Set gain auto to: ' + str(self.gain_auto))
+            else:
+                self._log_warning('Gain auto mode already set to: ' + str(auto) + ', doing nothing')
+            
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
 
     @property
     def gain_limit(self):
-        """tuple of float: Get the minimum and maximum gain in dB supported."""
+        """tuple of float: Get the minimum and maximum gain supported in the camera's native unit."""
         self._log_debug('Get gain limit called')
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
@@ -823,13 +888,20 @@ class Camera:
                 val = (node1.GetValue(), node2.GetValue())
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi')
+            controls = self._zwoasi_camera.get_controls()
+            min = controls['Gain']['MinValue']
+            max = controls['Gain']['MaxValue']
+            self._log_debug('Camera gave min ' + str(min) + ' and max ' + str(max))
+            return (min, max)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
 
     @property
     def gain(self):
-        """float: Get or set the camera gain in dB. Will set auto frame rate to False."""
+        """float: Get or set the camera gain in the camera's native unit."""
         self._log_debug('Get gain called')
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
@@ -845,14 +917,15 @@ class Camera:
                 val = node.GetValue()
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_camera.get_control_value(zwoasi.ASI_GAIN)[0]
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
     @gain.setter
-    def gain(self, gain_db):
-        self._log_debug('Set gain called with: '+str(gain_db))
+    def gain(self, gain):
+        self._log_debug('Set gain called with: '+str(gain))
         assert self.is_init, 'Camera must be initialised'
-        gain_db = float(gain_db)
         if self.gain_auto:
             self._log_debug('Gain is set to auto. Command auto off')
             self.gain_auto = False
@@ -869,12 +942,16 @@ class Camera:
             else:
                 self._log_debug('Setting gain')
                 try:
-                    node.SetValue(gain_db)
+                    node.SetValue(float(gain))
                 except PySpin.SpinnakerException as e:
                     if 'OutOfRangeException' in e.message:
                         raise AssertionError('The commanded value is outside the allowed range. See gain_limit')
                     else:
                         raise #Rethrows error
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi')
+            self._zwoasi_camera.set_control_value(zwoasi.ASI_GAIN, int(gain))
+            self._log_debug('Set gain to ' + str(self.gain))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -906,12 +983,14 @@ class Camera:
                 else:
                     self._log_debug('Unexpected return value')
                     raise RuntimeError('Unknow response from camera')
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_camera.get_control_value(zwoasi.ASI_EXPOSURE)[1]
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
     @exposure_time_auto.setter
     def exposure_time_auto(self, auto):
-        self._log_debug('Set expsure time called with: '+str(auto))
+        self._log_debug('Set expsure time auto called with: '+str(auto))
         assert self.is_init, 'Camera must be initialised'
         auto = bool(auto)
         if self.model.lower() == 'ptgrey':
@@ -932,6 +1011,17 @@ class Camera:
             else:
                 self._log_debug('Setting exposure auto to: '+set_to)
                 node.SetIntValue(node.GetEntryByName(set_to).GetValue())
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi')
+            if not self.exposure_time_auto == auto:
+                self._log_debug('Changing exposure auto mode to: ' + str(auto))
+                controls = self._zwoasi_camera.get_controls()
+                default = controls['Exposure']['DefaultValue']
+                self._log_debug('Setting exposure to auto ' + str(auto) + ' and default: ' + str(default))
+                self._zwoasi_camera.set_control_value(zwoasi.ASI_EXPOSURE, default, auto)
+                self._log_debug('Set exposure auto to: ' + str(self.exposure_time_auto))
+            else:
+                self._log_warning('Exposure auto mode already set to: ' + str(auto) + ', doing nothing')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -939,7 +1029,7 @@ class Camera:
     @property
     def exposure_time_limit(self):
         """tuple of float: Get the minimum and maximum expsure time in ms supported."""
-        self._log_debug('Get gain limit called')
+        self._log_debug('Get exposure time limit called')
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PySpin')
@@ -956,6 +1046,13 @@ class Camera:
                 val = (node1.GetValue()/1000, node2.GetValue()/1000)
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi')
+            controls = self._zwoasi_camera.get_controls()
+            min = controls['Exposure']['MinValue']
+            max = controls['Exposure']['MaxValue']
+            self._log_debug('Camera gave min ' + str(min) + ' and max ' + str(max))
+            return (min/1000, max/1000)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -978,6 +1075,8 @@ class Camera:
                 val = node.GetValue() / 1000 #microseconds used in PtGrey
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_camera.get_control_value(zwoasi.ASI_EXPOSURE)[0] / 1000 #microseconds used in zwoasi
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1009,6 +1108,9 @@ class Camera:
                                              +' See exposure_time_limit')
                     else:
                         raise #Rethrows error
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi, setting to ' + str(int(exposure_ms*1000)))
+            self._zwoasi_camera.set_control_value(zwoasi.ASI_EXPOSURE, int(exposure_ms*1000))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1036,6 +1138,8 @@ class Camera:
                 return val_horiz
             except PySpin.SpinnakerException:
                 self._log_warning('Failed to read', exc_info=True)
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_camera.get_bin()
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1051,6 +1155,13 @@ class Camera:
         initial_size = self.size_readout
         initial_bin = self.binning
         self._log_debug('Initial sensor readout area and binning: '+str(initial_size)+' ,'+str(initial_bin))
+        
+        # Calculate what the new ROI needs to be set to
+        bin_scaling = binning/initial_bin
+        new_size = [round(sz/bin_scaling) for sz in initial_size]
+        
+        self._log_debug('New binning and new size to set: '+str(binning)+' ,'+str(new_size))
+        
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PySpin')
             import PySpin
@@ -1069,18 +1180,22 @@ class Camera:
                     raise AssertionError('Not allowed to change binning now.')
                 else:
                     raise #Rethrows error
+            # Correctly set the ROI to adjust for new binning size
+            try:
+                self.size_readout = new_size
+                self._log_debug('Set new size to: ' + str(self.size_readout))
+            except:
+                self._log_warning('Failed to scale readout after binning change', exc_info=True)
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi, width must be multiple of 8 and height multiple of 2')
+            new_size = [new_size[0] - (new_size[0] % 8), new_size[1] - (new_size[1] % 2)]
+            self._log_debug('Adjusted to allowable size: ' + str(new_size))
+            self._zwoasi_camera.set_roi(width = new_size[0], height = new_size[1], bins = binning)
+            self._log_debug('Set binning to ' + str(self.binning) + ' and readout to ' + str(self.size_readout))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
-        new_bin = self.binning
-        bin_scaling = new_bin/initial_bin
-        new_size = [round(sz/bin_scaling) for sz in initial_size]
-        self._log_debug('New binning and new size to set: '+str(new_bin)+' ,'+str(new_size))
-        try:
-            self.size_readout = new_size
-            self._log_debug('Set new size to: ' + str(self.size_readout))
-        except:
-            self._log_warning('Failed to scale readout after binning change', exc_info=True)
+            
         if was_running:
             try:
                 self.start()
@@ -1107,6 +1222,14 @@ class Camera:
                 self._log_debug('Failure reading', exc_info=True)
                 raise
             return (val_w, val_h)
+        elif self.model.lower() == 'zwoasi':
+            properties = self._zwoasi_camera.get_camera_property()
+            bin = self.binning
+            width = int(properties['MaxWidth'] / bin)
+            width -= width % 8 # Must be multiple of 8
+            height = int(properties['MaxHeight'] / bin)
+            height -= height % 2 # Must be multiple of 2
+            return (width, height)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1116,6 +1239,8 @@ class Camera:
         """tuple of int: Get or set the number of pixels read out (width, height). Will automatically center.
 
         This applies after binning, i.e. this is the size the output image will be.
+        
+        For model *zwoasi* the set size will be rounded down to the nearest multiple of 8 in width and 2 in height.
 
         Setting will stop and restart camera if running.
         """
@@ -1135,6 +1260,8 @@ class Camera:
                 self._log_debug('Failure reading', exc_info=True)
                 raise
             return (val_w, val_h)
+        elif self.model.lower() == 'zwoasi':
+            return tuple(self._zwoasi_camera.get_roi_format()[:2])
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1192,6 +1319,11 @@ class Camera:
                     node_offs_y.SetValue(new_offset[1])
                 except PySpin.SpinnakerException:
                     self._log_warning('Failure centering readout', exc_info=True)
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi, adjust to allowable size:')
+            size = [size[0] - (size[0] % 8), size[1] - (size[1] % 2)]
+            self._zwoasi_camera.set_roi(width = size[0], height = size[1])
+            self._log_debug('Set readout to ' + str(self.size_readout))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
