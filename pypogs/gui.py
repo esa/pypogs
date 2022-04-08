@@ -785,7 +785,7 @@ class LiveViewFrame(ttk.Frame):
 
         if img is not None:
             zoom = self.zoom_variable.get()
-            (height, width) = img.shape[0:2]
+            (height, width) = img.shape[:2]
             offs_x = round(width / 2 * (1 - 1/zoom))
             offs_y = round(height / 2 * (1 - 1/zoom))
             width = width//zoom
