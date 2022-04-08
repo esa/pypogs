@@ -574,7 +574,7 @@ class LiveViewFrame(ttk.Frame):
         """Clear the offset *of the preceding tracker*."""
         self._logger.debug('Clicked on clear offset')
         cam = self.camera_variable.get()
-        if cam == COARSE_CCL:
+        if cam == COARSE_CCL or cam == STAR_OL:
             self._logger.info('Clearing OL offset.')
             try:
                 self.sys.control_loop_thread.OL_goal_offset_x_y = (0,0)
@@ -636,7 +636,23 @@ class LiveViewFrame(ttk.Frame):
             self.set_goal_variable.set(False)
         elif self.add_offset_variable.get() and not None in (x_image, y_image):
             cam = self.camera_variable.get()
-            if cam == COARSE_CCL:
+            if cam == STAR_OL:
+                self._logger.debug('Setting offset for OL tracker from Coarse camera')
+                try:
+                    plate_scale = self.sys.star_camera.plate_scale
+                    rotation = self.sys.star_camera.rotation
+                    click = [x_image / self.image_scale * plate_scale, y_image / self.image_scale * plate_scale]
+                    offset = np.array(click) - np.array(self.sys.coarse_track_thread.goal_x_y)
+                    rotmx = np.array([[np.cos(np.deg2rad(rotation)), np.sin(np.deg2rad(rotation))],
+                                  [-np.sin(np.deg2rad(rotation)), np.cos(np.deg2rad(rotation))]])
+                    offset = rotmx @ offset
+                    self._logger.info('Subtracting from OL offset: ' + str(offset))
+                    old_offset = self.sys.control_loop_thread.OL_goal_offset_x_y
+                    self.sys.control_loop_thread.OL_goal_offset_x_y = np.array(old_offset) - offset
+                except Exception as err:
+                    self._logger.debug('Could not set OL offset', exc_info=True)
+                    ErrorPopup(self, err, self._logger)
+            elif cam == COARSE_CCL:
                 self._logger.debug('Setting offset for OL tracker from Coarse camera')
                 try:
                     plate_scale = self.sys.coarse_camera.plate_scale

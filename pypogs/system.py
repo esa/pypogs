@@ -895,9 +895,18 @@ class System:
                     assert not self._stop_loop, 'Thread stop flag is set'
                     self._logger.info('Getting measurement at Alt: ' + str(alt)
                                       + ' Az: ' + str(azi) + '.')
-                    self.mount.move_to_alt_az(alt, azi, rate_control=rate_control, tolerance_deg=0.01, block=True)
+
+                    if not self._stop_loop:
+                      self.mount.move_to_alt_az(alt, azi, rate_control=rate_control, tolerance_deg=0.01, block=False)
+
+                    # Wait for mount to settle:
                     self._logger.info('Waiting '+str(settle_time_sec)+' seconds for mount to settle.')
-                    sleep(settle_time_sec)
+                    waited_time = 0 # sec
+                    check_period = 0.001 # sec
+                    while waited_time < settle_time_sec and not self._stop_loop:
+                        sleep(check_period)
+                        waited_time += check_period
+                    
                     for trial in range(0,max_trials+1):
                         assert not self._stop_loop, 'Thread stop flag is set'
                         self._logger.info('trial ' + str(trial) + ' at Alt: ' + str(alt) + ' Az: ' + str(azi))
@@ -1078,6 +1087,7 @@ class System:
             except BaseException:
                 self._logger.warning('Failed to join system worker thread.', exc_info=True)
         if self.mount is not None and self.mount.is_init:
+            self._logger.info('Stopping mount')
             try:
                 self.mount.stop()
             except BaseException:
