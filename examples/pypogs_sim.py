@@ -24,8 +24,8 @@ sys = pypogs.System()
 
 # CONFIGURE GROUND STATION SITE:
 class MySite:
-  lat  =   34.2  # degrees N
-  lon  = -118.2  # degrees E
+  lat  =   34.24  # degrees N
+  lon  = -118.24  # degrees E
   elev =   600   # meters above MSL
 sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 sys.alignment.set_alignment_enu()
@@ -54,10 +54,6 @@ sys.telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)  # use 
 
 
 # ADD COARSE CAMERA:
-coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
-#sys.add_coarse_camera(model="ASCOM", identity="Simulator")
-#sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_1")
-
 sys.add_coarse_camera(
   model="ASCOM", 
   #identity="ASICamera2",
@@ -65,13 +61,23 @@ sys.add_coarse_camera(
   identity="Simulator",
   exposure_time = 150,
   gain = 400,
-  plate_scale = round(coarsePlateScale, 3),  
-  binning = 2
+  plate_scale = 5,  
+  binning = 1
 )
 
 
 # ADD STAR CAMERA:
-sys.add_star_camera_from_coarse()
+#sys.add_star_camera_from_coarse()
+sys.add_star_camera(
+  model="ASCOM", 
+  #identity="ASICamera2",
+  #identity="ASICamera2_2",
+  identity="Simulator",
+  exposure_time = 150,
+  gain = 400,
+  plate_scale = 20,  
+  binning = 1
+)
 
 
 # ADD FINE CAMERA:

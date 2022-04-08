@@ -1074,12 +1074,13 @@ class Mount:
             self._logger.debug('Sending zero rate command')                
             self.set_rate_alt_az(0, 0)
             sleep(0.25)
-            self.stop_sidereal_tracking()
-            if self.model == 'ASCOM':
-                try:
-                    self._ascom_telescope.AbortSlew()
-                except:
-                    pass
+            if self._is_sidereal_tracking:
+                self.stop_sidereal_tracking()
+                if self.model == 'ASCOM':
+                    try:
+                        self._ascom_telescope.AbortSlew()
+                    except:
+                        pass
         self._logger.debug('Stopped mount')
 
     def wait_for_move_to(self, timeout=120):

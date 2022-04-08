@@ -34,7 +34,8 @@ sys.add_mount(
 )
 if sys.mount is not None:
   sys.mount.max_rate = (6, 6)
-  sys.mount.alt_limit = (-8, 80)
+  sys.mount.alt_limit = (-8, 80)  
+  sys.telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)
 '''
 
 # ADD COARSE CAMERA:
