@@ -21,14 +21,10 @@ the `pypogs ReadTheDocs website <https://pypogs.readthedocs.io/en/latest/>`_.
 .. autoclass:: pypogs.SpotTracker
    :members:
 
-.. automodule:: pypogs.hardware.hardware_camera
+.. automodule:: pypogs.hardware
 .. autoclass:: pypogs.Camera
    :members:
-   
-.. automodule:: pypogs.hardware.hardware_mount
 .. autoclass:: pypogs.Mount
    :members:
-
-.. automodule:: pypogs.hardware.hardware_receiver
 .. autoclass:: pypogs.Receiver
    :members:

@@ -1,2 +1,0 @@
-2021-09-20 11:24:09,396:pypogs.hardware.Mount-DEBUG: Mount called with model=None identity=None name=None auto_init=True
-2021-09-20 11:24:09,396:pypogs.hardware.Mount-INFO: Mount instance created with name: UnnamedMount.
