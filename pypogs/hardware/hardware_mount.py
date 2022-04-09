@@ -35,6 +35,16 @@ from struct import pack as pack_data
 import numpy as np
 import serial
 
+_serial_baud_rate = {'celestron':9600, 'ioptron azmp': 115200}
+_azmp_status = {'0':'stopped at non-zero pos', 
+                '1': 'tracking with PEC disabled',
+                '2': 'slewing',
+                '3': 'autoguiding',
+                '4': 'meridian flipping',
+                '5': 'tracking with PEC enabled',
+                '6': 'parked',
+                '7': 'stopped at zero pos'}
+
 class Mount:
     """Control a telescope gimbal mount.
 
@@ -81,7 +91,7 @@ class Mount:
         backlash compensation. In our testing the accuracy difference is negligible so the default is recommended.
     """
 
-    _supported_models = ('celestron',)
+    _supported_models = ('Celestron', 'iOptron AZMP')
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
         """Create Mount instance. See class documentation."""
@@ -120,8 +130,12 @@ class Mount:
         self._azi_limit = (None, None) #limit degees
         self._home_pos = (0, 0) #Home position
         self._alt_zero = 0 #Amount to subtract from alt.
-        # Only used for model celestron
-        self._cel_serial_port = None
+        # Serial port used for celestron and ioptron azmp
+        self._serial_port = None
+        self._baud = None
+        self._eol_byte = None
+        # Only used for ioptron azmp
+        self._azmp_command_mode = None
         # Thread for rate control
         self._control_thread = None
         self._control_thread_stop = True
@@ -214,7 +228,7 @@ class Mount:
         self._logger.debug('Setting model to: '+str(model))
         assert not self.is_init, 'Can not change already initialised device model'
         model = str(model)
-        assert model.lower() in self._supported_models,\
+        assert model.lower() in [x.lower() for x in self._supported_models],\
                                                 'Model type not recognised, allowed: '+str(self._supported_models)
         self._model = model.lower()
         self._logger.debug('Model set to '+str(self.model))
@@ -223,9 +237,9 @@ class Mount:
     def identity(self):
         """str: Get or set the device and/or input. Model must be defined first.
 
-        - For model *celestron* this can either be a string with the serial port (e.g. 'COM3' on Windows or
-          '/dev/ttyUSB0' on Linux) or an int with the index in the list of available ports to use (e.g. identity=0 i if
-          only one serial device is connected.)
+        - For model *celestron* or *iptron azmp* this can either be a string with the serial port (e.g. 'COM3' on
+          Windows or '/dev/ttyUSB0' on Linux) or an int with the index in the list of available ports to use (e.g.
+          identity=0 i if only one serial device is connected.)
         - Must set before initialising the device and may not be changed for an initialised device.
 
         Raises:
@@ -236,31 +250,25 @@ class Mount:
     def identity(self, identity):
         self._logger.debug('Setting identity to: '+str(identity))
         assert not self.is_init, 'Can not change already initialised device'
-        assert isinstance(identity, (str, int)), 'Identity must be a string or an int'
         assert self.model is not None, 'Must define model first'
-        if self.model == 'celestron':
-            if isinstance(identity, int):
-                self._logger.debug('Got int instance, finding open ports')
-                ports = self.list_available_ports()
-                self._logger.debug('Found ports: '+str(ports))
-                try:
-                    identity = ports[identity][0]
-                except IndexError:
-                    self._logger.debug('Index error', exc_info=True)
-                    raise AssertionError('No serial port for index: '+str(identity))
-            self._logger.debug('Using celestron with string identity, try to open and check model')
-            try:
-                with serial.Serial(identity, 9600, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,\
-                                   timeout=3.5, write_timeout=3.5) as ser:
-                    ser.write(b'm')
-                    ser.flush()
-                    r = ser.read(2)
-                    self._logger.debug('Got response: '+str(r))
-                    assert len(r)==2 and r[1] == ord('#'), 'Did not get the expected response from the device'
-            except serial.SerialException:
-                self._logger.debug('Failed to open port', exc_info=True)
-                raise AssertionError('Failed to open the serial port named: '+str(identity))
-            self._identity = identity
+        if self.model.lower() == 'celestron':
+            self._logger.debug('Using %s, try to open serial port and confirm model' % self.model)
+            serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
+            self._logger.debug('Opening serial port: ' + str(serial_port_name))
+            r = self._serial_test(serial_port_name, baud=9600, test_command='m', nbytes=2)
+            assert r[1] == ord('#'), 'Did not get the expected response from the device'
+            self._logger.debug('Setting identity to: '+serial_port_name)
+            self._identity = serial_port_name
+
+        elif self.model.lower() == 'ioptron azmp':
+            self._logger.debug('Using %s, try to open serial port and confirm model' % self.model)
+            serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
+            self._logger.debug('Opening serial port: ' + str(serial_port_name))
+            r = self._serial_test(serial_port_name, baud=115200, test_command=':MountInfo#', nbytes=4)
+            assert r == b'5035' or r == b'9035', 'Did not get the expected response from the device'
+            self._logger.debug('Setting identity to: '+serial_port_name)
+            self._identity = serial_port_name
+
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -270,7 +278,7 @@ class Mount:
     def is_init(self):
         """bool: True if the device is initialised (and therefore ready to control)."""
         if not self.model: return False
-        if self.model == 'celestron':
+        if self.model.lower() in ('celestron', 'ioptron azmp'):
             return self._is_init
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -280,7 +288,7 @@ class Mount:
     def available_properties(self):
         """tuple of str: Get all the available properties (settings) supported by this device."""
         assert self.is_init, 'Mount must be initialised'
-        if self.model.lower() == 'celestron':
+        if self.model.lower() in ('celestron', 'ioptron azmp'):
             return ('zero_altitude', 'home_alt_az', 'max_rate', 'alt_limit', 'azi_limit')
         else:
             self._log_warning('Forbidden model string defined.')
@@ -307,10 +315,10 @@ class Mount:
     @home_alt_az.setter
     def home_alt_az(self, pos):
         self._logger.debug('Got set home pos with: '+str(pos))
-        try:
+        assert pos in (int, float) or len(pos) == 2, 'Must be scalar or array of length 2'
+        if pos in (int, float):
             pos = tuple([float(x) for x in pos])
-            assert len(pos)==2
-        except TypeError:
+        else:
             pos = (float(pos), float(pos))
         self._home_pos = pos
         self._logger.debug('Home pos set to: '+str(self.home_alt_az))
@@ -326,11 +334,12 @@ class Mount:
     @max_rate.setter
     def max_rate(self, maxrate):
         self._logger.debug('Got set max rate with: '+str(maxrate))
-        try:
+        assert maxrate in (int, float) or len(maxrate) == 2, 'Must be scalar or array of length 2'
+        if maxrate in (int, float):
             maxrate = tuple([float(x) for x in maxrate])
-            assert len(maxrate)==2
-        except TypeError:
+        else:
             maxrate = (float(maxrate), float(maxrate))
+            
         self._max_speed = maxrate
         self._logger.debug('Set max to: '+str(self.max_rate))
 
@@ -374,23 +383,34 @@ class Mount:
         self._logger.debug('Initialising')
         assert not self.is_init, 'Already initialised'
         assert not None in (self.model, self.identity), 'Must define model and identity before initialising'
-        if self.model == 'celestron':
+        if self.model.lower() == 'celestron':
             self._logger.debug('Using Celestron, try to initialise')
-            try:
-                self._cel_serial_port = serial.Serial(self.identity, 9600, parity=serial.PARITY_NONE,\
-                                                      stopbits=serial.STOPBITS_ONE, timeout=3.5, write_timeout=3.5)
-            except serial.SerialException:
-                self._logger.debug('Failed to open', exc_info=True)
-                raise RuntimeError('Failed to connect to the mount during initialisation')
-            self._logger.debug('Sending model check')
-            self._cel_serial_port.write(b'm')
-            self._cel_serial_port.flush()
-            r = self._cel_serial_port.read(2)
-            self._logger.debug('Got response: '+str(r))
-            assert len(r)==2 and r[1] == ord('#'), 'Did not get the expected response during initialisation'
-            self._logger.debug('Ensure sidreal tracking is off.')
+            self._baud = 9600
+            self._eol_byte = b'#'
+            self._serial_port_open(self.identity)
+            self._logger.debug('Opened serial port, sending test command')
+            res = self._serial_query('m')
+            self._logger.debug('Mount responded with: ' + str(res))
+            self._logger.debug('Set tracking to off')
             self._cel_tracking_off()
             self._is_init = True
+        
+        elif self.model.lower() == 'ioptron azmp':
+            self._logger.debug('Using %s, try to initialise' % self.model)
+            self._baud = 115200
+            self._eol_byte = b'#'
+            self._serial_port_open(self.identity)
+            self._logger.debug('Opened serial port, check command mode')
+            # Command mode persists across resets. Expect either mode initially, and try to get to special mode.
+            mode = self._azmp_get_command_mode()
+            self._logger.debug('Initial command mode: %s' % mode)
+            if mode == 'normal':
+                self._logger.debug('Ensure sidereal tracking is off and transition to special')
+                self.stop_sidereal_tracking()
+                self._azmp_set_command_mode('special')
+            # TODO: Else should command stop moving
+            self._is_init = True
+            
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -409,11 +429,15 @@ class Mount:
             self.stop()
         except:
             self._logger.debug('Did not stop', exc_info=True)
-        if self.model == 'celestron':
+        if self.model.lower() == 'celestron':
             self._logger.debug('Using celestron, closing and deleting serial port')
-            self._cel_serial_port.close()
-            self._cel_serial_port = None
-            self._is_init = False
+            self._serial_port_close()
+            self._logger.info('Mount deinitialised')
+        elif self.model.lower() == 'ioptron azmp':
+            self._logger.debug('Using iOptron AZMP, reverting mount commanding mode to normal')
+            self._azmp_change_mode('normal')
+            self._logger.debug('Closing and deleting serial port')
+            self._serial_port_close()
             self._logger.info('Mount deinitialised')
         else:
             self._logger.warning('Forbidden model string defined.')
@@ -427,18 +451,39 @@ class Mount:
         if self._control_thread is not None and self._control_thread.is_alive():
             self._logger.debug('Has active celestron control thread')
             return True
-        if self.model == 'celestron':
+        if self.model.lower() == 'celestron':
             self._logger.debug('Using celestron, asking if moving')
             ret = [None]
             def _is_moving_to(ret):
-                self._cel_send_text_command('L')
-                ret[0] = self._cel_read_to_eol()
+                self._serial_send_text_command('L')
+                ret[0] = self._serial_read_to_eol()
             t = Thread(target=_is_moving_to, args=(ret,))
             t.start()
             t.join()
             moving = not ret[0] == b'0'
             self._logger.debug('Mount returned: ' + str(ret[0]) + ', is moving: ' + str(moving))
             return moving
+            
+        elif self.model.lower() == 'ioptron azmp':
+            is_moving = False
+            self._logger.debug('Using %s in %s command mode, asking if moving' % (self.model, self._azmp_command_mode))
+            if self._azmp_command_mode == 'special':
+                azi_axis_rate = self._serial_query(':Q0#').decode('ASCII')
+                alt_axis_rate = self._serial_query(':Q1#').decode('ASCII')
+                self._logger.debug('azi_axis_rate: "%s", alt_axis_rate: "%s"' % (azi_axis_rate, alt_axis_rate))
+                try: # TODO: Ask Ryan about this
+                    is_moving = (int(azi_axis_rate or 0) != 0 or int(alt_axis_rate or 0) != 0)
+                except:
+                    raise AssertionError('invalid rate query response (azi_axis_rate: "%s", alt_axis_rate: "%s")' % \
+                                                                                    (azi_axis_rate, alt_axis_rate))
+            else:
+                mount_state = self._serial_query(':GLS#').decode('ASCII')
+                mount_system_status_byte = mount_state[14]
+                mount_system_state = _azmp_status[mount_system_status_byte]
+                self._logger.debug('AZMP system state: "%s"' % mount_system_state)
+                is_moving = mount_system_status_byte in '12345' # Should be b'12345' ?
+            return is_moving    
+            
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -462,13 +507,30 @@ class Mount:
                            + ' rate_control=' + str(rate_control))
         self._logger.debug('Stopping mount first')
         self.stop()
-        if self.model == 'celestron':
+        if self.model.lower() in ('celestron', 'ioptron azmp'):
             self._logger.debug('Using celestron, ensure range -180 to 180')
-#            alt = self.degrees_to_n180_180(alt - self._alt_zero)
+#            alt = self.degrees_to_n180_180(alt - self._alt_zero)  FIX HERE?
             alt = self.degrees_to_n180_180(alt)
             azi = self.degrees_to_n180_180(azi)
             self._logger.debug('Will command: alt=' + str(alt) + ' azi=' + str(azi))
-            if rate_control: #Use own control thread
+            
+            if self.model.lower() == 'ioptron azmp':
+                self._azmp_set_command_mode('special')
+            
+            if not rate_control: # Command mount natively
+                self._logger.debug('Sending move command to mount')
+                success = [False]
+                def _move_to_alt_az(alt, azi, success):
+                    success[0] = _command_to_alt_az(alt, azi)
+                t = Thread(target=_move_to_alt_az, args=(alt, azi, success))
+                t.start()
+                t.join()
+                self._logger.debug('Send successful')
+                if block:
+                    self._logger.debug('Waiting for mount to finish')
+                    self.wait_for_move_to()
+            
+            else: # Use own control thread
                 self._logger.debug('Starting rate controller')
                 Kp = 1.5
                 self._control_thread_stop = False
@@ -476,19 +538,33 @@ class Mount:
                 def _loop_slew_to(alt, azi, success):
                     while not self._control_thread_stop:
                         curr_pos = self.get_alt_az()
-                        eAlt = Kp * self.degrees_to_n180_180(alt - curr_pos[0])
-                        eAzi = Kp * self.degrees_to_n180_180(azi - curr_pos[1])
-                        if eAlt < -self._max_speed[0]: eAlt = -self._max_speed[0]
-                        if eAlt > self._max_speed[0]: eAlt = self._max_speed[0]
-                        if eAzi < -self._max_speed[1]: eAzi = -self._max_speed[1]
-                        if eAzi > self._max_speed[1]: eAzi = self._max_speed[1]
-
-                        if abs(eAlt)<.001 and abs(eAzi)<.001:
-                            self.set_rate_alt_az(0, 0)
+                        # Get current position error
+                        error_alt = self.degrees_to_n180_180(alt - curr_pos[0])
+                        error_azi = self.degrees_to_n180_180(azi - curr_pos[1])
+                        error_tol = .001  # deg
+                        min_speed = .01  # deg/s
+                        
+                        if abs(error_alt) < error_tol:
+                            rate_alt = 0
+                        else:
+                            rate_alt = Kp * error_alt
+                            # Clip to maximum and minimum speeds
+                            if abs(rate_alt) > self.max_rate[0]: rate_alt = self.max_rate[0] * np.sign(rate_alt)
+                            if abs(rate_alt) < min_speed: rate_alt = min_speed * np.sign(rate_alt)
+                        
+                        if abs(error_azi) < error_tol:
+                            rate_azi = 0
+                        else:
+                            rate_azi = Kp * error_azi
+                            # Clip to maximum and minimum speeds
+                            if abs(rate_azi) > self.max_rate[1]: rate_azi = self.max_rate[1] * np.sign(rate_azi)
+                            if abs(rate_azi) < min_speed: rate_azi = min_speed * np.sign(rate_azi)
+                        
+                        self.set_rate_alt_az(rate_alt, rate_azi)
+                        if rate_alt == 0 and rate_azi == 0:
                             success[0] = True
                             break
-                        else:
-                            self.set_rate_alt_az(eAlt, eAzi)
+                            
                     self._control_thread_stop = True
                 self._control_thread = Thread(target=_loop_slew_to, args=(alt, azi, success))
                 self._control_thread.start()
@@ -496,28 +572,50 @@ class Mount:
                     self._logger.debug('Waiting for thread to finish')
                     self._control_thread.join()
                     assert success[0], 'Failed moving with rate controller'
-            else:
-                self._logger.debug('Sending move command to mount')
-                success = [False]
-                def _move_to_alt_az(alt, azi, success):
-                    #azi = azi %360 #Mount uses 0-360
-                    # TODO check alt zero correct
-                    altRaw = int(self.degrees_to_0_360(alt - self._alt_zero) / 360 * 2**32) & 0xFFFFFF00
-                    aziRaw = int(self.degrees_to_0_360(azi) / 360 * 2**32) & 0xFFFFFF00
-                    altFormatted = '{0:0{1}X}'.format(altRaw,8)
-                    aziFormatted = '{0:0{1}X}'.format(aziRaw,8)
-                    command = 'b' + aziFormatted + ',' + altFormatted
-                    self._cel_send_text_command(command)
-                    assert self._cel_check_ack(), 'Mount did not acknowledge'
-                    success[0] = True
-                t = Thread(target=_move_to_alt_az, args=(alt, azi, success))
-                t.start()
-                t.join()
-                assert success[0], 'Failed communicating with mount'
-                self._logger.debug('Send successful')
-                if block:
-                    self._logger.debug('Waiting for mount to finish')
-                    self.wait_for_move_to()
+
+        else:
+            self._logger.warning('Forbidden model string defined.')
+            raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+
+    def _command_to_alt_az(self, alt, azi):
+        """PRIVATE: Command mount to slew to alt/az coordinates. Must be initialised.
+
+        Args:
+            alt (float): Altitude (degrees).
+            azi (float): Azimuth (degrees).
+        """
+        self._logger.debug('Got request to command to alt: %0.3f, azi: %0.3f' % (alt, azi))
+        assert self.is_init, 'Must be initialised'
+        if self.model.lower() == 'celestron':
+            self._logger.debug('Sending move command to mount')
+            success = [False]
+            def _move_to_alt_az(alt, azi, success):
+                #azi = azi %360 #Mount uses 0-360
+                # TODO check alt zero correct
+                altRaw = int(self.degrees_to_0_360(alt - self._alt_zero) / 360 * 2**32) & 0xFFFFFF00
+                aziRaw = int(self.degrees_to_0_360(azi) / 360 * 2**32) & 0xFFFFFF00
+                altFormatted = '{0:0{1}X}'.format(altRaw,8)
+                aziFormatted = '{0:0{1}X}'.format(aziRaw,8)
+                command = 'b' + aziFormatted + ',' + altFormatted
+                self._serial_send_text_command(command)
+                assert self._serial_check_ack(), 'Mount did not acknowledge'
+                success[0] = True
+            t = Thread(target=_move_to_alt_az, args=(alt, azi, success))
+            t.start()
+            t.join()
+            assert success[0], 'Failed communicating with mount'
+            self._logger.debug('Send successful')
+
+        elif self.model.lower() == 'ioptron azmp':
+            # TODO check alt zero correct
+            self._azmp_change_mode('special')
+            # Azimuth:
+            command = 'T0%+i#' % int(self.degrees_to_0_360(azi) * 3600 / 0.01 )
+            self._serial_send_text_command(command, eol_byte = b'1')
+            # Altitude:
+            command = 'T1%+i#' % int(self.degrees_to_0_360(alt - self._alt_zero) * 3600 / 0.01 )
+            self._serial_send_text_command(command, eol_byte = b'1')
+
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -529,13 +627,13 @@ class Mount:
             tuple of float: the (altitude, azimuth) angles of the mount in degrees (-180, 180].
         """
         assert self.is_init, 'Must be initialised'
-        if self.model == 'celestron':
+        if self.model.lower() == 'celestron':
             self._logger.debug('Using celestron, requesting mount position')
             def _get_alt_az(ret):
                 command = bytes([ord('z')]) #Get precise AZM-ALT
-                self._cel_serial_port.write(command)
+                self._serial_port.write(command)
                 # The command returns ASCII encoded text of HEX values!
-                res = self._cel_read_to_eol().decode('ASCII')
+                res = self._serial_read_to_eol().decode('ASCII')
                 r2 = res.split(',')
                 ret[0] = int(r2[1], 16)
                 ret[1] = int(r2[0], 16)
@@ -550,6 +648,36 @@ class Mount:
             self._state_cache['alt'] = alt
             self._state_cache['azi'] = azi
             return (alt, azi)
+
+        elif self.model.lower() == 'ioptron azmp':
+            (alt, azi) = (None, None)
+            if self._azmp_command_mode == 'special':
+                # returns integer units of 0.01 arcsec
+                for attempt in (0, 1):
+                    azi_raw = self._serial_query(':P0#').decode('ASCII')
+                    alt_raw = self._serial_query(':P1#').decode('ASCII')
+                    try:
+                        azi = self.degrees_to_n180_180( int(azi_raw) * 0.01 / 3600 + 180 )
+                        alt = self.degrees_to_n180_180( 90 - int(alt_raw) * 0.01 / 3600 + self._alt_zero)
+                        self._logger.debug('Mount position: alt=' + str(alt_raw) + ' azi=' + str(azi_raw) \
+                                            + ' => alt=' + str(alt) + ' azi=' + str(azi))
+                        break
+                    except:
+                        self._logger.info('WARNING: invalid responses from mount (alt: "%s", azi: "%s")' % (alt_raw, azi_raw))
+            elif self._azmp_command_mode == 'normal':
+                # returns char array: : “sTTTTTTTTTTTTTTTTT#”
+                mount_altaz_info = self._serial_query(':GAC#').decode('ASCII')
+                assert mount_altaz_info is not None, 'Failed to get mount position.'
+                alt_raw = int(mount_altaz_info[0:9])
+                azi_raw = int(mount_altaz_info[9:18])
+                azi = self.degrees_to_n180_180( int(azi_raw) * 0.01 / 3600 )
+                alt = self.degrees_to_n180_180( int(alt_raw) * 0.01 / 3600 + self._alt_zero)
+                self._logger.debug('Mount position: alt=' + str(alt_raw) + ' azi=' + str(azi_raw) \
+                                    + ' => alt=' + str(alt) + ' azi=' + str(azi))
+            self._state_cache['alt'] = alt
+            self._state_cache['azi'] = azi
+            return (alt, azi)
+            
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -575,7 +703,7 @@ class Mount:
         self._logger.debug('Got rate command. alt=' + str(alt) + ' azi=' + str(azi))
         if (abs(alt) > self._max_speed[0]) or  (abs(azi) > self._max_speed[0]):
             raise ValueError('Above maximum speed!')
-        if self.model == 'celestron':
+        if self.model.lower() == 'celestron':
             self._logger.debug('Using celestron, sending rate command to mount')
             success = [False]
             def _set_rate_alt_az(alt, azi, success):
@@ -584,23 +712,23 @@ class Mount:
                 if rate >= 0:
                     rateLo = rate & 0xFF
                     rateHi = rate>>8 & 0xFF
-                    self._cel_send_bytes_command([ord('P'),3,17,6,rateHi,rateLo,0,0])
+                    self._serial_send_bytes_command([ord('P'),3,17,6,rateHi,rateLo,0,0])
                 else:
                     rateLo = -rate & 0xFF
                     rateHi = -rate>>8 & 0xFF
-                    self._cel_send_bytes_command([ord('P'),3,17,7,rateHi,rateLo,0,0])
-                assert self._cel_check_ack(), 'Mount did not acknowledge!'
+                    self._serial_send_bytes_command([ord('P'),3,17,7,rateHi,rateLo,0,0])
+                assert self._serial_check_ack(), 'Mount did not acknowledge!'
                 #Azimuth
                 rate = int(round(azi*3600*4))
                 if rate >= 0:
                     rateLo = rate & 0xFF
                     rateHi = rate>>8 & 0xFF
-                    self._cel_send_bytes_command([ord('P'),3,16,6,rateHi,rateLo,0,0])
+                    self._serial_send_bytes_command([ord('P'),3,16,6,rateHi,rateLo,0,0])
                 else:
                     rateLo = -rate & 0xFF
                     rateHi = -rate>>8 & 0xFF
-                    self._cel_send_bytes_command([ord('P'),3,16,7,rateHi,rateLo,0,0])
-                assert self._cel_check_ack(), 'Mount did not acknowledge!'
+                    self._serial_send_bytes_command([ord('P'),3,16,7,rateHi,rateLo,0,0])
+                assert self._serial_check_ack(), 'Mount did not acknowledge!'
                 success[0] = True
             t = Thread(target=_set_rate_alt_az, args=(alt, azi, success))
             t.start()
@@ -609,6 +737,22 @@ class Mount:
             self._logger.debug('Send successful')
             self._state_cache['alt_rate'] = alt
             self._state_cache['azi_rate'] = azi
+        
+        elif self.model.lower() == 'ioptron azmp':
+            self._logger.debug('Using %s, sending rate command to mount' % self.model)
+            if self._azmp_command_mode != 'special':
+                self._azmp_set_command_mode('special')
+            # convert rates to integer units of 0.01 arcsec/second
+            self._serial_port.reset_input_buffer()
+            alt_rate_command = ':M1%+i#' % int(round(-1*alt*3600/0.01))
+            azi_rate_command = ':M0%+i#' % int(round(azi*3600/0.01))
+            self._serial_query(alt_rate_command, eol_byte = b'1')
+            self._serial_query(azi_rate_command, eol_byte = b'1')
+
+            self._logger.debug('Send successful')
+            self._state_cache['alt_rate'] = alt
+            self._state_cache['azi_rate'] = azi
+        
         else:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -618,10 +762,13 @@ class Mount:
         assert self.is_init, 'Must be initialised'
         self._logger.debug('Got stop command, check thread')
         if self._control_thread is not None and self._control_thread.is_alive():
-            self._logger.debug('Stopping celestron control thread')
+            self._logger.debug('Stopping control thread')
             self._control_thread_stop = True
             self._control_thread.join()
             self._logger.debug('Stopped')
+            sleep(.25)
+            self._serial_port.reset_input_buffer()
+        
         self._logger.debug('Sending zero rate command')
         self.set_rate_alt_az(0, 0)
         self._logger.debug('Stopped mount')
@@ -666,48 +813,144 @@ class Mount:
     def degrees_to_n180_180(number):
         """float: Convert angle (degrees) to range (-180, 180]"""
         return 180 - (180-float(number))%360
+        
+    def _serial_find_port(self, port_index):
+        """PRIVATE: Get serial port name at a given index, starting at zero"""
+        port_index = int(port_index)
+        self._logger.debug('Searching for serial port at index: ' +str(port_index))
+        ports = self.list_available_ports()
+        self._logger.debug('Found ports: ' + str(ports))
+        try:
+            return ports[port_index][0]
+        except IndexError:
+            self._logger.debug('Index error', exc_info=True)
+            raise AssertionError('No serial port for index: '+str(identity))
+        
+    def _serial_test(self, port_name, baud, test_command, nbytes):
+        """PRIVATE: Test if serial communication is established by sending """
+        self._logger.debug('Testing serial port "%s" with test command "%s", reading %i bytes' % (
+                                                                                port_name, test_command, nbytes))
+        self._logger.debug('Testing serial port "%s", baud %i' % (port_name, baud))
+        try:
+            with serial.Serial(port_name, baud, timeout=3.5, write_timeout=3.5) as ser:
+                ser.write(test_command.encode('ASCII'))
+                ser.flush()
+                response = ser.read(nbytes)
+                self._logger.debug('Got response: '+str(response))
+                return response
+        except serial.SerialException:
+            self._logger.warning('Failed to communicate on serial port ' + str(port_name), exc_info=True)
+            raise
+        
+    def _serial_port_open(self, port_name, baud=None, timeout=3.5):
+        """PRIVATE: Opens serial port specified by port_name string."""
+        self._logger.debug('Got open serial port with name: ' + str(port_name))
+        baud = baud or self._baud  # take from self if not given
+        try:
+            self._serial_port = serial.Serial(port_name, baud, timeout=timeout, write_timeout=timeout)
+            self._is_init = True
+            self._logger.debug('Successfully opened port')
+        except serial.SerialException:
+            self._logger.waring('Failed to open serial port at ' + str(port_name), exc_info=True)
+            raise
+            
+    def _serial_port_close(self):
+        """PRIVATE: Closes serial port."""
+        self._logger.debug('Got close serial port')
+        if self._serial_port is not None:
+            self._serial_port.close()
+            self._serial_port = None
+            self._logger.debug('Port closed')
+        self._is_init = False
+        
+    def _serial_query(self, command, eol_byte=None):
+        """PRIVATE: Encodes as ASCII and sends command string to mount, then reads and returns 
+        response string from mount ending in indicated end-of-line character.
+        inputs:
+          command (str): command message to be sent to mount.
+          eol_byte (byte, optional): expected terminating character at end of mount response.
+        returns:  ASCII string response from mount up to and including EOL byte character.
+        """
+        assert self.is_init, 'Must be initialised'
+        self._logger.debug('Sending serial command "%s" to mount' % str(command))
+        eol_byte = eol_byte or self._eol_byte  # Take from self if not given
+        try:
+            self._serial_port.reset_input_buffer()
+            self._serial_send_text_command(command)
+            response = self._serial_read_to_eol(self._eol_byte)
+        except:
+            self._logger.debug('Failed to communicate', exc_info=True)
+            raise
+
+    def _serial_send_text_command(self, command):
+        """PRIVATE: Encode as ASCII and send to mount."""
+        assert self.is_init, 'Must be initialised'
+        self._serial_port.write(command.encode('ASCII'))
+        self._serial_port.flush() #Push out data
+
+    def _serial_send_bytes_command(self, command):
+        """PRIVATE: Send bytes to mount."""
+        assert self.is_init, 'Must be initialised'
+        self._serial_port.write(bytes(command))
+        self._serial_port.flush() #Push out data
+
+    def _serial_check_ack(self, ack_byte = None):
+        """PRIVATE: Read one byte and compare to the acknowledge byte character."""
+        assert self.is_init, 'Must be initialised'
+        ack_byte = ack_byte or self._eol_byte
+        b = self._serial_port.read()
+        return b == ack_byte
+
+    def _serial_read_to_eol(self, eol_byte=None):
+        """PRIVATE: Read response to the EOL byte character. Return bytes."""
+        assert self.is_init, 'Must be initialised'
+        eol_byte = eol_byte or self._eol_byte  # Take from self if not given
+        response = b'' #Empty type 'bytes'
+        while True:
+            r = self._serial_port.read()
+            if r == b'': #If we didn't get anything/timeout
+                raise RuntimeError('Mount serial timed out!')
+            else:
+                if r == eol_byte:
+                    self._logger.debug('Read from mount: '+str(response))
+                    return response
+                else:
+                    response += r
+
 
     def _cel_tracking_off(self):
         """PRIVATE: Disable sidreal tracking on celestron mount."""
         success = [False]
         def _set_tracking_off(success):
-            self._cel_send_bytes_command([ord('T'),0])
-            assert self._cel_check_ack(), 'Mount did not acknowledge!'
+            self._serial_send_bytes_command([ord('T'),0])
+            assert self._serial_check_ack(), 'Mount did not acknowledge!'
             success[0] = True
         t = Thread(target=_set_tracking_off, args=(success,))
         t.start()
         t.join()
         assert success[0], 'Failed communicating with mount'
+        
+    def _azmp_get_command_mode(self):
+        """PRIVATE: Get the iOptron AZMP command mode. Returns either 'normal' or 'special'"""
+        self._logger.debug('Checking AZMP command mode')
+        assert self.is_init, 'Serial port is not initialized'
+        # Empty both buffers
+        self._serial_port.reset_input_buffer()
+        self._serial_port.reset_output_buffer()
+        # first try:
+        self._serial_send_text_command(':MountInfo#')
+        code = self._serial_port.read(4)
+        assert code in (b'5035', b'9035'), 'Failed to get AZMP command mode. Mount returned: ' + str(code)
+        self._azmp_command_mode = 'normal' if code == b'5035' else 'special'
+        self._logger.debug('Mode is: ' + str(self._azmp_command_mode))
+        return self._azmp_command_mode
 
-    def _cel_send_text_command(self,command):
-        """PRIVATE: Encode and send str to mount."""
-        # Given command as type 'str', send to mount as ASCII text
-        self._cel_serial_port.write(command.encode('ASCII'))
-        self._cel_serial_port.flush() #Push out data
-
-    def _cel_send_bytes_command(self,command):
-        """PRIVATE: Send bytes to mount."""
-        # Given command as list of integers, send to mount as bytes
-        self._cel_serial_port.write(bytes(command))
-        self._cel_serial_port.flush() #Push out data
-
-    def _cel_check_ack(self):
-        """PRIVATE: Read one byte and check that it is the ack #."""
-        # Checks if '#' is returned as expected
-        b = self._cel_serial_port.read()
-        return int.from_bytes(b, 'big') == ord('#')
-
-    def _cel_read_to_eol(self):
-        """PRIVATE: Read response to the EOL # character. Return bytes."""
-        # Read from mount until EOL # character. Return as type 'bytes'
-        response = b'' #Empty type 'bytes'
-        while True:
-            r = self._cel_serial_port.read()
-            if r == b'': #If we didn't get anything/timeout
-                raise RuntimeError('No response from mount!')
-            else:
-                if int.from_bytes(r, 'big') == ord('#'):
-                    self._logger.debug('Read from mount: '+str(response))
-                    return response
-                else:
-                    response += r
+    def _azmp_set_command_mode(self, to_mode):
+        self._logger.debug('Got request to transition mount to %s commanding mode' % to_mode)
+        if to_mode == self._azmp_get_command_mode():
+            self._logger.debug('Mount is already in command mode "%s"' % self._azmp_command_mode)
+        else:
+            self._logger.debug('Commanding AZMP mode transition')
+            self._serial_send_text_command(':ZZZ#')
+            sleep(0.5)
+            assert self._azmp_get_command_mode() == to_mode, 'Failed to transition mount to %s mode"' % to_mode
