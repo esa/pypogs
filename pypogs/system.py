@@ -46,9 +46,7 @@ from tifffile import imwrite as tiff_write
 
 # Internal imports:
 from tetra3 import Tetra3
-from .hardware_cameras import Camera
-from .hardware_mounts import Mount
-from .hardware_receivers import Receiver
+from .hardware import Camera, Mount, Receiver
 from .tracking import TrackingThread, ControlLoopThread
 from .horizons_ephem import Ephem
 
