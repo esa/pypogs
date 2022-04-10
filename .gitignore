@@ -13,6 +13,7 @@
 # System data and debug
 /pypogs/data/*
 /pypogs/debug/*
+/pypogs/hardware/debug/*
 
 # Builds
 /build/*
