@@ -408,7 +408,7 @@ class Camera:
                             if self.parent._average_frame_time is None:
                                 self.parent._average_frame_time = new_frame_time
                             else:
-                                self.parent._average_frame_time = .3*self.parent._average_frame_time + .7*new_frame_time
+                                self.parent._average_frame_time = .8*self.parent._average_frame_time + .2*new_frame_time
                     self.parent._log_debug('Event handler finished.')
 
             self._ptgrey_event_handler = PtGreyEventHandler(self)
@@ -501,7 +501,7 @@ class Camera:
                             if self.parent._average_frame_time is None:
                                 self.parent._average_frame_time = new_frame_time
                             else:
-                                self.parent._average_frame_time = .3*self.parent._average_frame_time + .7*new_frame_time
+                                self.parent._average_frame_time = .8*self.parent._average_frame_time + .2*new_frame_time
                         
                         self.parent._log_debug('Event handler finished.')
 
