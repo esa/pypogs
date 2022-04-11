@@ -25,10 +25,11 @@ License:
 # Standard imports:
 from pathlib import Path
 import logging
-from time import sleep, time as timestamp
+from time import sleep, time as timestamp, perf_counter as precision_timestamp
 from datetime import datetime
 from threading import Thread, Event
 from struct import pack as pack_data
+
 
 # External imports:
 import numpy as np
@@ -129,8 +130,10 @@ class Camera:
         self._call_on_image = set()
         self._got_image_event = Event()
         self._image_data = None
-        self._image_timestamp = None
+        self._image_timestamp = None  # Can this be replaced with precision version?
         self._imgs_since_start = 0
+        self._average_frame_time = None  # Running average of time between frames in ms
+        self._image_precision_timestamp = None  # Precision timestamp of last frame
 
         self._logger.debug('Calling self on constructor input')
         if model is not None:
@@ -372,6 +375,8 @@ class Camera:
                     """Read out the image and a timestamp, reshape to array, pass to parent"""
                     self.parent._log_debug('Image event! Unpack and release pointer')
                     self.parent._image_timestamp = datetime.utcnow()
+                    last_timestamp = self.parent._image_precision_timestamp
+                    self.parent._image_precision_timestamp = precision_timestamp()
                     try:
                         img = img_ptr.GetData().reshape((img_ptr.GetHeight(), img_ptr.GetWidth()))
                         if self.parent._flipX:
@@ -396,7 +401,14 @@ class Camera:
                             func(self.parent._image_data, self.parent._image_timestamp)
                         except:
                             self.parent._log_warning('Failed image callback', exc_info=True)
+                    
                     self.parent._imgs_since_start += 1
+                    if last_timestamp is not None:
+                            new_frame_time = self.parent._image_precision_timestamp - last_timestamp
+                            if self.parent._average_frame_time is None:
+                                self.parent._average_frame_time = new_frame_time
+                            else:
+                                self.parent._average_frame_time = .3*self.parent._average_frame_time + .7*new_frame_time
                     self.parent._log_debug('Event handler finished.')
 
             self._ptgrey_event_handler = PtGreyEventHandler(self)
@@ -453,6 +465,9 @@ class Camera:
                     while not self._stop_running:
                         try:
                             img = cam.capture_video_frame(timeout = timeout_ms)
+                            self.parent._image_timestamp = datetime.utcnow()
+                            last_timestamp = self.parent._image_precision_timestamp
+                            self.parent._image_precision_timestamp = precision_timestamp()
                         except zwoasi.ZWO_IOError as e:
                             if str(zwoasi.ZWO_IOError) == 'Camera closed':
                                 self.parent._log_debug('zwoasi Camera closed, probably deinitialising')
@@ -479,7 +494,15 @@ class Camera:
                                 func(self.parent._image_data, self.parent._image_timestamp)
                             except:
                                 self.parent._log_warning('Failed image callback', exc_info=True)
+                        
                         self.parent._imgs_since_start += 1
+                        if last_timestamp is not None:
+                            new_frame_time = self.parent._image_precision_timestamp - last_timestamp
+                            if self.parent._average_frame_time is None:
+                                self.parent._average_frame_time = new_frame_time
+                            else:
+                                self.parent._average_frame_time = .3*self.parent._average_frame_time + .7*new_frame_time
+                        
                         self.parent._log_debug('Event handler finished.')
 
             self._zwoasi_image_handler = ZwoAsiImageHandler(self)
@@ -795,6 +818,11 @@ class Camera:
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+
+    @property
+    def frame_rate_actual(self):
+        """float: Get the actual image frame rate in Hz. Returns None if not running."""
+        return 1/self._average_frame_time if self._average_frame_time is not None else None
 
     @property
     def gain_auto(self):
@@ -1421,6 +1449,7 @@ class Camera:
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
         self._image_data = None
         self._image_timestamp = None
+        self._average_frame_time = None
         self._got_image_event.clear()
         self._log_info('Acquisition stopped, name: '+self.name)
 
