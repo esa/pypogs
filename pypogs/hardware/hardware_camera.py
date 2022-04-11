@@ -29,7 +29,6 @@ from time import sleep, time as timestamp
 from datetime import datetime
 from threading import Thread, Event
 from struct import pack as pack_data
-from threading import Thread
 
 # External imports:
 import numpy as np
@@ -531,7 +530,7 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',
                     'frame_rate_auto', 'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
-        if self.model.lower() == 'zwoasi':
+        elif self.model.lower() == 'zwoasi':
             return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',        'frame_rate_auto', 'gain', 'gain_auto', 'exposure_time') # UPDATE AS YOU GO
         else:
             self._log_warning('Forbidden model string defined.')
