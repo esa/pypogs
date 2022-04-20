@@ -833,7 +833,7 @@ class System:
                         # TODO: Test
                         fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
                         solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate,
-                                                             fov_max_error=.1)
+                                                             fov_max_error=.1*fov_estimate)
                         self._logger.debug('TIME:  ' + timestamp.iso)
                         # Save image
                         tiff_write(self.data_folder / (start_time.strftime('%Y-%m-%dT%H%M%S')
