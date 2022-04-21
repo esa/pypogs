@@ -877,7 +877,7 @@ class Mount:
         try:
             self._serial_port.reset_input_buffer()
             self._serial_send_text_command(command)
-            response = self._serial_read_to_eol(self._eol_byte)
+            response = self._serial_read_to_eol(eol_byte)
         except:
             self._logger.debug('Failed to communicate', exc_info=True)
             raise
