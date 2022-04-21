@@ -611,10 +611,10 @@ class Mount:
             self._azmp_change_mode('special')
             # Azimuth:
             command = 'T0%+i#' % int(self.degrees_to_0_360(azi) * 3600 / 0.01 )
-            self._serial_send_text_command(command, eol_byte = b'1')
+            self._serial_send_text_command(command)
             # Altitude:
             command = 'T1%+i#' % int(self.degrees_to_0_360(alt - self._alt_zero) * 3600 / 0.01 )
-            self._serial_send_text_command(command, eol_byte = b'1')
+            self._serial_send_text_command(command)
 
         else:
             self._logger.warning('Forbidden model string defined.')
