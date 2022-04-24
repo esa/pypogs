@@ -13,7 +13,7 @@
 # System data and debug
 /pypogs/data/*
 /pypogs/debug/*
-/pypogs/hardware/debug/*
+*.txt
 
 # Builds
 /build/*
@@ -31,4 +31,3 @@
 *.dat                  
 *.pyc
 tetra3
-*.txt

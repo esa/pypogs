@@ -93,7 +93,7 @@ class Camera:
         # Logger setup
         self._debug_folder = None
         if debug_folder is None:
-            self.debug_folder = Path(__file__).parent / 'debug'
+            self.debug_folder = Path(__file__).parent.parent / 'debug'
         else:
             self.debug_folder = debug_folder
         self._logger = logging.getLogger('pypogs.hardware.Camera')
