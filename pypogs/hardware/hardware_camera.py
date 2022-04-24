@@ -86,7 +86,7 @@ class Camera:
             cam.deinitialize()
     """
     _supported_models = ('ptgrey','zwoasi','ascom')
-    _default_model = 'ascom'
+    _default_model = 'zwoasi'
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None, properties=[]):
         """Create Camera instance. See class documentation."""
