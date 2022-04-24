@@ -97,10 +97,7 @@ sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
 
 # START GUI:
 try:
-    #sys.do_auto_star_alignment(max_trials=2, rate_control=True, pos_list=[(40, -135), (60, -135)])
-    pypogs.GUI(sys, 500)
-    
-
+    pypogs.GUI(sys, 50)
 except Exception:
     raise
 finally:
