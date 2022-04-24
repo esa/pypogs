@@ -1255,7 +1255,8 @@ class HardwareFrame(ttk.Frame):
             self.name_entry.delete(0, tk.END)
             self.name_entry.insert(0, name)
             self.linked_bool.set(self.device is not None and self.device is self.link_device)
-            self.master.update()            
+            self.master.update()   
+            self.update_properties()
 
         def clear_callback(self):
             self._logger.debug('HardwarePopup clear button clicked')
