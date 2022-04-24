@@ -125,6 +125,7 @@ class Camera:
         self._flipX = False
         self._flipY = False
         self._rot90 = 0 #Number of times to rotate by 90 deg, done after flips
+        self._color_bin = True # Downscale when debayering instead of interpolating for speed
         #Only used for ptgrey
         self._ptgrey_camera = None
         self._ptgrey_camlist = None
@@ -472,6 +473,8 @@ class Camera:
                     """Read out the image and a timestamp, reshape to array, pass to parent"""
                     self.parent._log_debug('Image event! Unpack and release pointer')
                     self.parent._image_timestamp = datetime.utcnow()
+                    last_timestamp = self.parent._image_precision_timestamp
+                    self.parent._image_precision_timestamp = precision_timestamp()                                                                                  
                     try:
                         img = img_ptr.GetData().reshape((img_ptr.GetHeight(), img_ptr.GetWidth()))
                         if self.parent._flipX:
@@ -582,7 +585,11 @@ class Camera:
                         # If color camera we may need to debayer
                         if self.parent._zwoasi_property['IsColorCam'] and len(img.shape) < 3:
                             pattern = _zwoasi_bayer[self.parent._zwoasi_property['BayerPattern']]
-                            self.parent._image_data = _debayer_image(img, order=pattern)
+                            t0_debayer = precision_timestamp()
+                            self.parent._image_data = _debayer_image(img, order=pattern,
+                                                                     downsize=self.parent.color_bin)
+                            t_debayer = precision_timestamp() - t0_debayer
+                            self.parent._log_debug('Debayered image in ' + str(t_debayer))
                         else:
                             self.parent._image_data = img
                         
@@ -747,7 +754,7 @@ class Camera:
         if self._ptgrey_camera:
             self._log_debug('Found PtGrey camera, deinitialising')
             try:
-                self._ptgrey_camera.UnregisterEvent(self._ptgrey_event_handler)
+                self._ptgrey_camera.UnregisterEventHandler(self._ptgrey_event_handler)
                 self._log_debug('Unregistered event handler')
             except:
                 self._log_exception('Failed to unregister event handler')
@@ -781,10 +788,11 @@ class Camera:
         """tuple of str: Get all the available properties (settings) supported by this device."""
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
-            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout', 'frame_rate_auto',\
-                    'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
+            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',
+                    'frame_rate_auto', 'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
         elif self.model.lower() == 'zwoasi':
-            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',        'frame_rate_auto', 'gain', 'gain_auto', 'exposure_time') # UPDATE AS YOU GO
+            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',
+                    'frame_rate_auto', 'gain', 'gain_auto', 'exposure_time_auto', 'exposure_time', 'color_bin')
         elif self.model.lower() == 'ascom':
             return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout',\
                      'gain', 'exposure_time')           
@@ -1361,8 +1369,6 @@ class Camera:
             max = controls['Exposure']['MaxValue']
             self._log_debug('Camera gave min ' + str(min) + ' and max ' + str(max))
             return (min/1000, max/1000)
-        elif self.model.lower() == 'zwoasi':
-            return self._zwoasi_camera.get_control_value(zwoasi.ASI_EXPOSURE)[0] / 1000 #microseconds used in zwoasi
         elif self.model.lower() == 'ascom':
             return self._ascom_camera.ExposureMin, self._ascom_camera.ExposureMax
         else:
@@ -1440,6 +1446,7 @@ class Camera:
     @property
     def binning(self):
         """int: Number of pixels to bin in each dimension (e.g. 2 gives 2x2 binning). Bins by summing.
+        *ptgrey* cameras bin by summing, *zwoasi* cameras bin by averaging.
 
         Setting will stop and restart camera if running. Will scale size_readout to show the same sensor area.
         """
@@ -1487,6 +1494,8 @@ class Camera:
             self._log_debug('Camera is running, stop it and restart immediately after.')
             self.stop()
         initial_size = self.size_readout
+        if self.color_bin:
+            initial_size = [2*x for x in initial_size]
         initial_bin = self._binning
         self._log_debug('Initial sensor readout area and binning: '+str(initial_size)+' ,'+str(initial_bin))
         
@@ -1565,6 +1574,38 @@ class Camera:
             self._log_debug('Camera imaging loop was not previously running.')
 
     @property
+    def color_bin(self):
+        """bool: Get or set if colour binning is active. Defaults to True for colour cameras. Is always False for mono
+        cameras.
+        
+        When colour binning is True, each 2x2 Bayer group on the image sensor will form one RGB pixel in the output.
+        If set to False, interpolation will be used to create an RGB image at full resolution. Interpolation may slow
+        down the image processing significantly.
+        """
+        assert self.is_init, 'Camera must be initialised'
+        if self.model.lower() == 'ptgrey':
+            return False
+        elif self.model.lower() == 'zwoasi':
+            return self._zwoasi_property['IsColorCam'] and self._color_bin
+        else:
+            self._log_warning('Forbidden model string defined.')
+            raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+            
+    @color_bin.setter
+    def color_bin(self, bin):
+        self._log_debug('Set color bin called with: '+str(bin))
+        assert self.is_init, 'Camera must be initialised'
+        if self.model.lower() == 'ptgrey':
+            raise RuntimeError('ptgrey cameras do not support color binning')
+        elif self.model.lower() == 'zwoasi':
+            self._log_debug('Using zwoasi, check if we use a colour camera')
+            assert self._zwoasi_property['IsColorCam'], 'Must have colour camera to do colour binning'
+            self._color_bin = bool(bin)
+            self._log_debug('Set color bin to: ' + str(self._color_bin))
+        else:
+            self._log_warning('Forbidden model string defined.')                                                                                
+
+    @property
     def size_max(self):
         """tuple of int: Get the maximum allowed readout size (width, height) in pixels."""
         assert self.is_init, 'Camera must be initialised'
@@ -1590,7 +1631,7 @@ class Camera:
             width -= width % 8 # Must be multiple of 8
             height = int(properties['MaxHeight'] / bin)
             height -= height % 2 # Must be multiple of 2
-            return (width, height)
+            return (width, height) if not self.color_bin else (width//2, height//2)
         elif self.model.lower() == 'ascom':
             try:
                 val_w = self._ascom_camera.CameraXSize
@@ -1629,7 +1670,8 @@ class Camera:
                 raise
             return (val_w, val_h)
         elif self.model.lower() == 'zwoasi':
-            return tuple(self._zwoasi_camera.get_roi_format()[:2])
+            (width, height) = tuple(self._zwoasi_camera.get_roi_format()[:2])
+            return (width, height) if not self.color_bin else (width//2, height//2)
         elif self.model.lower() == 'ascom':
             try:
                 val_w = self._ascom_camera.NumX
@@ -1695,7 +1737,11 @@ class Camera:
                 except PySpin.SpinnakerException:
                     self._log_warning('Failure centering readout', exc_info=True)
         elif self.model.lower() == 'zwoasi':
-            self._log_debug('Using zwoasi, adjust to allowable size:')
+            self._log_debug('Using zwoasi, check if colour binning and adjust')
+            if self.color_bin:
+                size = tuple([x*2 for x in size])
+                self._log_debug('Size adjusted to ' + str(size))
+            self._log_debug('Adjust desired size to allowable size:')                                                                     
             size = [size[0] - (size[0] % 8), size[1] - (size[1] % 2)]
             self._zwoasi_camera.set_roi(width = size[0], height = size[1])
             self._log_debug('Set readout to ' + str(self.size_readout))
@@ -1735,9 +1781,9 @@ class Camera:
         The method should have the signature (image, timestamp, \*args, \*\*kwargs) where:
 
         - image (numpy.ndarray): The image data as a 2D numpy array.
-        - timestamp (datetime.datetime): UTC timestamp when the image event occured (i.e. when the capture
+        - timestamp (datetime.datetime): UTC timestamp when the image event occurred (i.e. when the capture
           finished).
-        - \*args, \*\*kwargs should be allowed for forward compatability.
+        - \*args, \*\*kwargs should be allowed for forward compatibility.
 
         The callback should *not* be used for computations, make sure the method returns as fast as possible.
 
