@@ -36,6 +36,7 @@ from threading import Thread, Event
 from time import sleep, perf_counter as precision_timestamp
 from datetime import datetime
 from csv import writer as csv_write
+from os import path
 
 # External imports:
 from astropy.time import Time as apy_time
@@ -434,6 +435,7 @@ class ControlLoopThread:
         self._log_debug('OL goal offset set got: ' + str(offset))
         self._OL_goal_offset_x_y = np.array(offset) / 3600  # deg internally
         self._log_debug('OL goal offset set to: ' + str(self.OL_goal_offset_x_y))
+        self._log_info('OL goal offset set to: ' + str(self.OL_goal_offset_x_y))
 
     @property
     def CCL_enable(self):
@@ -741,8 +743,9 @@ class ControlLoopThread:
                              'COARSE_EXIST', 'COARSE_TRACK', 'COARSE_ALT_TRACK', 'COARSE_ALT_MEAN',
                              'COARSE_AZ_TRACK', 'COARSE_AZ_MEAN', 'COARSE_SD', 'COARSE_RMSE',
                              'FINE_EXIST', 'FINE_TRACK', 'FINE_ALT_TRACK', 'FINE_ALT_MEAN',
-                             'FINE_AZ_TRACK', 'FINE_AZ_MEAN', 'FINE_SD', 'FINE_RMSE', 'FB_ERR_ALT',
-                             'FB_ERR_AZ', 'FB_INT_ALT', 'FB_INT_AZ', 'FB_ANGVEL_ALT',
+                             'FINE_AZ_TRACK', 'FINE_AZ_MEAN', 'FINE_SD', 'FINE_RMSE', 'FB_ERR_ALT', 'FB_ERR_AZ',
+                             'P_term_ALT', 'P_term_AZ', 'I_term_ALT', 'I_term_AZ',
+                             'FB_INT_ALT', 'FB_INT_AZ', 'FB_ANGVEL_ALT',
                              'FB_ANGVEL_AZ', 'FB_SATURATED', 'FB_COMMAND_ALT', 'FB_COMMAND_AZ',
                              'FB_KP', 'FB_KI', 'FF_ALT', 'FF_AZ', 'REC_EXIST', 'REC_POWER',
                              'REC_SMOOTH'])
@@ -779,6 +782,18 @@ class ControlLoopThread:
             while not self._stop_loop and (loop_utctime < end_time
                                            if end_time is not None else True):
                 # CONTROL LOOP #
+                #DM external commands
+                # TODO: test and finish
+                try:
+                    csv_file = r'C:\Pypogs\pypogs-master\pypogs\ex_commands.csv'
+                    if path.exists(csv_file):
+                        command_list = self._parent.get_external_commands_from_csv(csv_file)
+                        if command_list is not None:
+                            ex_offsets = self._parent.execute_commands_from_csv(command_list)
+                            if ex_offsets is not None:
+                                self.OL_goal_offset_x_y = ex_offsets
+                except:
+                    self._log_info('EXT csv read error')
                 # Time info:
                 loop_timestamp = seconds_since_start()
                 loop_utctime = apy_time.now()  # Astropy timestamp in UTC
@@ -1046,6 +1061,8 @@ class ControlLoopThread:
                     err_integral += add_integral
                     self._log_debug('Integral calculated to: ' + str(err_integral))
                 # Calculate correction term
+                p_term = fb_kp * (err_alt_az)
+                i_term = fb_kp * (fb_ki * err_integral)
                 angvel_correction = fb_kp * (err_alt_az + fb_ki * err_integral)
                 (angvel_correction, saturated) = self._clip_feedback_rates(angvel_correction,
                                                                            speed_limit)
@@ -1138,7 +1155,7 @@ class ControlLoopThread:
                                      'ft_search_x': ft_search_pos[0],
                                      'ft_search_y': ft_search_pos[1]}
                 # Save to file
-                with open(data_file, 'a') as file:
+                with open(data_file, 'a', newline='') as file:
                     writer = csv_write(file)
 
                     writer.writerow([loop_utctime.isot, loop_timestamp, loop_index, mode,
@@ -1150,6 +1167,7 @@ class ControlLoopThread:
                                      ft_exists, ft_has_track, ft_track_alt_az[0],
                                      ft_mean_alt_az[0], ft_track_alt_az[1], ft_mean_alt_az[1],
                                      ft_track_sd, ft_rmse, err_alt_az[0], err_alt_az[1],
+                                     p_term[0],p_term[1],i_term[0],i_term[1],
                                      err_integral[0], err_integral[1], angvel_correction[0],
                                      angvel_correction[1], saturated, angvel_total[0],
                                      angvel_total[1], fb_kp, fb_ki, ff_alt, ff_azi, rec_exists,
@@ -1529,6 +1547,7 @@ class TrackingThread:
                 dt = loop_timestamp - old_timestamp
                 old_timestamp = loop_timestamp
                 self._actual_freq = 1/dt
+
                 # Feedforward
                 ff_step_abs = np.sqrt(np.sum(np.array(self._feedforward_rate)**2))
                 self._log_debug('Feedforward step magnitude: ' + str(ff_step_abs))
@@ -1538,6 +1557,7 @@ class TrackingThread:
                     self.spot_tracker.change_mean_relative(*ff_step)
                 else:
                     ff_step = np.array([0, 0])
+
                 # Update the goal offset
                 offs_step = np.array(self._goal_offset_rate) * dt
                 self._log_debug('Adding step to goal offset: (x,y): ' + str(offs_step))
@@ -1578,7 +1598,7 @@ class TrackingThread:
                 ff_rate = self._feedforward_rate
                 offs_rate = self._goal_offset_rate
                 # Saving log
-                with open(data_file, 'a') as file:
+                with open(data_file, 'a', newline='') as file:
                     writer = csv_write(file)
                     writer.writerow([loop_datetime_utc.isoformat(), loop_timestamp, loop_index,
                                      int(img_saved), int(img_used), int(has_track), rmse, x, mx,
@@ -1587,6 +1607,7 @@ class TrackingThread:
                                      offs_step[0], offs_step[1]])
                 loop_index += 1
                 self._process_image.clear()  # Clear processing flag, used to sync
+
         except BaseException:
             self._log_debug('Worker loop threw exception', exc_info=True)
             try:
@@ -1922,13 +1943,13 @@ class SpotTracker:
     reasonable maximum search radius (default 1000 arcsec).* This will also be used to initialise
     the position SD estimate. *It is recommended to set a reasonable minimum search radius
     (default None)* to at least one pixel's width. It is also possible to set maximum and minimum
-    limits on the signal sum and area SD estimates, otherwise it will be limited to between zero
+    limits on the signal sum and area SD estimates, otherwise it will be limitied to between zero
     and the mean value of the respective signal.
 
     You may define a goal position against which the output should be measured. By default this is
     (0,0) which is the centre of the image. The units for all positions will be in the units you
     provide via plate_scale (default 1 arcsec/pixel) to SpotTracker.update_from_image(). The goal
-    and properties ending in _absolute are always measured relative to image centre.
+    and properties ending in _absolute are allways measured relative to image centre.
 
     The estimators use exponentially weighted moving mean and variance.
     SpotTracker.smoothing_parameter (default 10) defines how samples are weighted and roughly
@@ -1940,7 +1961,7 @@ class SpotTracker:
     SpotTracker.failure_sd_penalty (default 25%) to account for drift in the mean.
 
     A performance metric, the root-mean-squared error (RMSE), is provided which measures the
-    position error relative to the goal (instead of the mean, as the SD does). By default this uses
+    position error relative to the goal (insted of the mean, as the SD does). By default this uses
     SpotTracker.smoothing_parameter with exponential averaging, but
     SpotTracker.rmse_smoothing_parameter may be defined to control this individually.
 
@@ -2994,6 +3015,7 @@ class SpotTracker:
                                            bg_sub_mode=self.bg_subtract_mode,
                                            return_moments=True, sigma=self.image_sigma_th,
                                            centroid_window=self.centroid_window)
+
             if ret[0][:, 0].size > 0:
                 self._success_count += 1
                 self._fail_count = 0
