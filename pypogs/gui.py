@@ -155,7 +155,7 @@ class GUI:
 
     @property
     def debug_folder(self):
-        """pathlib.Path: Get or set the path for debug logging. Will create folder if not existing."""
+        """pathlib.Path: Get or set the path for debug logging. Will create folder if not exsisting."""
         return self._debug_folder
     @debug_folder.setter
     def debug_folder(self, path):
@@ -502,9 +502,12 @@ class LiveViewFrame(ttk.Frame):
         ttk.Radiobutton(self.bottom_frame1, text='Fine (FCL)', variable=self.camera_variable, value=FINE_FCL) \
                 .grid(row=0, column=5, padx=(5,0))
         self.logger.debug('Creating entry and checkbox for image max value control')
-        ttk.Label(self.bottom_frame1, text='Max Value:').grid(row=0, column=6, padx=(30,0))
+        ttk.Label(self.bottom_frame1, text='Max Value coarse:').grid(row=0, column=6, padx=(30,0))
         self.max_entry = ttk.Entry(self.bottom_frame1, width=10)
         self.max_entry.grid(row=0, column=7, padx=(5,0))
+        ttk.Label(self.bottom_frame1, text='Max Value fine:').grid(row=1, column=6, padx=(30,0))
+        self.max_entry_fine = ttk.Entry(self.bottom_frame1, width=10)
+        self.max_entry_fine.grid(row=1, column=7, padx=(5,0))
         self.auto_max_variable = tk.BooleanVar()
         self.auto_max_variable.set(True)
         ttk.Checkbutton(self.bottom_frame1, variable=self.auto_max_variable, text='Auto')\
@@ -571,7 +574,7 @@ class LiveViewFrame(ttk.Frame):
             self.logger.debug('No camera selected in clear tracker callback')
 
     def clear_offset_callback(self):
-        """Clear the offset *of the preceding tracker*."""
+        """Clear the offset *of the preceeding tracker*."""
         self.logger.debug('Clicked on clear offset')
         cam = self.camera_variable.get()
         if cam == COARSE_CCL:
@@ -767,7 +770,10 @@ class LiveViewFrame(ttk.Frame):
             except:
                 self.logger.debug('Failed', exc_info=True)
 
-        if img is not None:
+        if img is not None and img.size == 0:
+            print('_____________________Image size 0')
+
+        if (img is not None) and (img.size != 0):
             zoom = self.zoom_variable.get()
             (height, width) = img.shape
             offs_x = round(width / 2 * (1 - 1/zoom))
@@ -780,20 +786,37 @@ class LiveViewFrame(ttk.Frame):
                 self.logger.warning('Failed to zoom image')
 
         self.logger.debug('Setting image to: ' + str(img))
-        if img is not None:
-            if self.auto_max_variable.get(): #Auto set max scaling
-                maxval = int(np.max(img))
-                self.max_entry.delete(0, 'end')
-                self.max_entry.insert(0, str(maxval))
-                self.logger.debug('Using auto max scaling with maxval {}'.format(maxval))
+        if (img is not None) and (img.size != 0):
+            if self.auto_max_variable.get():  # Auto set max scaling
+                try:
+                    maxval = int(np.max(img))
+                    if cam == FINE_FCL:
+                        self.max_entry_fine.delete(0, 'end')
+                        self.max_entry_fine.insert(0, str(maxval))
+                    else:
+                        self.max_entry.delete(0, 'end')
+                        self.max_entry.insert(0, str(maxval))
+                        self.logger.debug('Using auto max scaling with maxval {}'.format(maxval))
+                except:
+                    self.logger.debug('Failed to convert max entry value {} to int')
+                    maxval = 255
             else:
                 try:
-                    maxval = int(self.max_entry.get())
-                    self.logger.debug('Using manual maxval {}'.format(maxval))
+                    # Max white mapping: Get max pixel value for coarse and for fine cameras seperatly
+                    # Max white mapping: for coarse and star cam
+                    if cam == STAR_OL or cam == COARSE_CCL:
+                        maxval = int(self.max_entry.get())
+                        self.logger.debug('Using manual maxval for coars/star {}'.format(maxval))
+                    # Max white mapping: for fine cam
+                    else:
+                        maxval = int(self.max_entry_fine.get())
+                        self.logger.debug('Using manual maxval for finecam {}'.format(maxval))
                 except:
-                    self.logger.debug('Failed to convert max entry value {} to int'\
-                                       .format(self.max_entry.get()))
+                    self.logger.debug('Failed to convert max entry value {} to int' \
+                                      .format(self.max_entry.get()))
                     maxval = 255
+
+
             # Scale and convert to 8-bit
             img_scaled = (img / max(1, int(.8 * maxval / 255))).clip(0, 255).astype('uint8')
             pil_img = Image.fromarray(img_scaled)
@@ -1398,6 +1421,7 @@ class TargetFrame(ttk.Frame):
     def file_button_callback(self):
         try:
             raise NotImplementedError('Feature coming soon!')
+
         except Exception as err:
             ErrorPopup(self, err, self.logger)
 
@@ -1420,11 +1444,11 @@ class TargetFrame(ttk.Frame):
 
             radec_frame = ttk.Frame(self)
             radec_frame.grid(row=1, column=0, padx=(10,0), pady=10)
-            ttk.Label(radec_frame, text='Set target from RA/Dec:').grid(row=0, column=0, columnspan=2)
-            ttk.Label(radec_frame, text='RA: (deg)').grid(row=1, column=0, sticky=tk.E)
+            ttk.Label(radec_frame, text='Set target from RA/Dec hhmmss :').grid(row=0, column=0, columnspan=2)
+            ttk.Label(radec_frame, text='RA:(023344)').grid(row=1, column=0, sticky=tk.E)
             self.ra_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
             self.ra_entry.grid(row=1, column=1)
-            ttk.Label(radec_frame, text='Dec: (deg)').grid(row=2, column=0, sticky=tk.E)
+            ttk.Label(radec_frame, text='Dec:(891533)').grid(row=2, column=0, sticky=tk.E)
             self.dec_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
             self.dec_entry.grid(row=2, column=1)
             ttk.Button(radec_frame, text='Set', command=self.radec_callback) \
@@ -1460,8 +1484,19 @@ class TargetFrame(ttk.Frame):
             if isinstance(target, SkyCoord):
                 ra = target.ra.to_value('deg')
                 dec = target.dec.to_value('deg')
-                self.ra_entry.insert(0, str(ra))
-                self.dec_entry.insert(0, str(dec))
+                # Ra Dec convertion from degree back to deg:arcmin:arcsec
+                ra = ra/15
+                ra_min_ss = (ra-np.trunc(ra))*60
+                ra_h = str(int(np.trunc(ra)))
+                if (ra<10):
+                    ra_h = ('0' + str(int(np.trunc(ra))))
+
+                ra_string = (ra_h + str(int(np.trunc(ra_min_ss))) + str(int((ra_min_ss- np.trunc(ra_min_ss))*60)))
+                dec_min_ss = (dec-np.trunc(dec))*60
+                dec_string = (str(int(np.trunc(dec))) + str(int(np.trunc(dec_min_ss))) + str(int((dec_min_ss- np.trunc(dec_min_ss))*60)))
+
+                self.ra_entry.insert(0, str(ra_string))
+                self.dec_entry.insert(0, str(dec_string))
             elif isinstance(target, EarthSatellite):
                 (l1, l2) = self.master.sys.target.get_tle_raw()
                 self.tle_line1_entry.insert(0, l1)

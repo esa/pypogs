@@ -32,6 +32,7 @@ from pathlib import Path
 import logging
 from threading import Thread
 from csv import writer as csv_write
+from csv import reader as csv_reader
 
 # External imports:
 import numpy as np
@@ -124,20 +125,21 @@ class System:
                 sys.coarse_track_thread.spot_tracker.bg_subtract_mode = 'global_median'
                 sys.control_loop_thread.CCL_P = 1
 
-    Set location and alignment:
-        :attr:`alignment` references the :class:`pypogs.Alignment` instance (auto created) used to
-        determine and calibrate the location, alignment, and mount corrections. See the class
-        documentation for how to set location and alignments. To do auto-alignment, use the
-        :meth:`do_auto_star_alignment` method (requires a star camera). Plate solving for the auto
-        alignment is performed via the tetra3 package. You can set a custom instance via
-        :attr:`tetra3`, otherwise a default instance will be created for you.
+    Set location and alignment:	
+        :attr:`alignment` references the :class:`pypogs.Alignment` instance (auto created) used to	
+        determine and calibrate the location, alignment, and mount corrections. See the class	
+        documentation for how to set location and alignments. To do auto-alignment, use the	
+        :meth:`do_auto_star_alignment` method (requires a star camera). Plate solving for the auto	
+        alignment is performed via the tetra3 package. You can set a custom instance via	
+        :attr:`tetra3`, otherwise a default instance will be created for you.	
+        
+        If your mount has built in alignment (and/or is physically aligned to the earth) you may	
+        call :meth:`alignment.set_alignment_enu` to set the telescope alignment to East, North, Up	
+        (ENU) coordinates, which will also disable the corrections done in pypogs. ENU is the	
+        traditional astronomical coordinate system for altitude (elevation) and azimuth telescopes,	
+        measured as degrees above the horizon and degrees away from north (towards east)	
+        respectively.	
 
-        If your mount has built in alignment (and/or is physically aligned to the earth) you may
-        call :meth:`alignment.set_alignment_enu` to set the telescope alignment to East, North, Up
-        (ENU) coordinates, which will also disable the corrections done in pypogs. ENU is the
-        traditional astronomical coordinate system for altitude (elevation) and azimuth telescopes,
-        measured as degrees above the horizon and degrees away from north (towards east)
-        respectively.
 
         Example:
             ::
@@ -183,7 +185,7 @@ class System:
     @staticmethod
     def update_databases():
         """Download and update Skyfield and Astropy databases (of earth rotation)."""
-        sf_api.Loader(_system_data_dir).download('finals2000A.all')
+        sf_api.Loader(_system_data_dir).download('finals2000A.all')	
         apy_util.data.download_file(apy_util.iers.IERS_A_URL, cache='update')
 
     def __init__(self, data_folder=None, debug_folder=None):
@@ -229,7 +231,7 @@ class System:
         self._mount = None
         self._alignment = Alignment()
         self._target = Target()
-        # tetra3 instance used for plate solving
+        # tetra3 instance used for plate solving	
         self._tetra3 = None
         # Variable to stop system thread
         self._stop_loop = True
@@ -764,26 +766,26 @@ class System:
     def clear_mount(self):
         """Set the mount to None."""
         self.mount = None
-        
-    @property
-    def tetra3(self):
-        """tetra3.Tetra3: Get or set the tetra3 instance used for plate solving star images. Will
-        create an instance with 'default_database' if none is set.
-        """
-        if self._tetra3 is None:
-            self._logger.debug('Loading default database tetra3')
-            self._tetra3 = Tetra3('default_database')
-        return self._tetra3
-    
-    @tetra3.setter
-    def tetra3(self, tetra3):
-        self._logger.debug('Got set tetra3 instance with' + str(tetra3))
-        assert isinstance(tetra3, Tetra3), 'Must be tetra3 instance'
-        self._tetra3 = tetra3
-        delf._logger.debug('Set tetra3 instace')
+
+    @property	
+    def tetra3(self):	
+        """tetra3.Tetra3: Get or set the tetra3 instance used for plate solving star images. Will	
+        create an instance with 'default_database' if none is set.	
+        """	
+        if self._tetra3 is None:	
+            self._logger.debug('Loading default database tetra3')	
+            self._tetra3 = Tetra3('default_database')	
+        return self._tetra3	
+    	
+    @tetra3.setter	
+    def tetra3(self, tetra3):	
+        self._logger.debug('Got set tetra3 instance with' + str(tetra3))	
+        assert isinstance(tetra3, Tetra3), 'Must be tetra3 instance'	
+        self._tetra3 = tetra3	
+        delf._logger.debug('Set tetra3 instace')	
 
     def do_auto_star_alignment(self, max_trials=1, rate_control=True):
-        """Do the auto star alignment procedure by taking eight star images across the sky.
+        """Do the auto star aliginment procedure by taking eight star images across the sky.
 
         Will call System.Alignment.set_alignment_from_observations() with the captured images.
 
@@ -830,11 +832,12 @@ class System:
                         assert not self._stop_loop, 'Thread stop flag is set'
                         img = self.star_camera.get_next_image()
                         timestamp = apy_time.now()
-                        # TODO: Test
-                        fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
-                        solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate,
-                                                             fov_max_error=.1)
+                        # TODO: Test	
+                        fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600	
+                        solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate,	
+                                                             fov_max_error=.1)	
                         self._logger.debug('TIME:  ' + timestamp.iso)
+                        
                         # Save image
                         tiff_write(self.data_folder / (start_time.strftime('%Y-%m-%dT%H%M%S')
                                                        + '_Alt' + str(alt) + '_Azi' + str(azi)
@@ -867,6 +870,84 @@ class System:
         self._thread = Thread(target=run)
         self._stop_loop = False
         self._thread.start()
+
+    def get_alignment_list_from_csv(self, star_align):
+        """Read data from csv and put in list for alignment
+        Args:
+            star_align (path, must): csv file with RA,DE,0,0,0,apy_time, az,al. Blank lines - no difference.
+        Returns:
+            list for method (set_alignment_from_observations(alignment_list))
+                """
+        alignment_list = []
+        parsed_list = []
+        with open(star_align, newline='') as csvfile:
+            reader = csv_reader(csvfile, delimiter=',')
+            for row in reader:
+                try:
+                    parsed_list = (0, 0, 0, 0, 0)
+                    apy_time_value = apy_time(row[5], format='iso')
+                    try:
+                        parsed_list = (float(row[0]),
+                                       float(row[1]),
+                                       apy_time_value,
+                                       int(float(row[6])),
+                                       int(float(row[7])))
+                        alignment_list.append(parsed_list)
+                    except:
+                        parsed_list = (0, 0,
+                                       apy_time_value,
+                                       int(float(row[6])),
+                                       int(float(row[7])))
+                        alignment_list.append(parsed_list)
+                except:
+                    pass
+        return alignment_list
+
+    def get_external_commands_from_csv(self, file_path):
+        """Read data from csv file for OL offsets
+        Args:
+            file_path (path, must): csv file with offset values
+        Returns:
+            none
+                """
+        parsed_list = []
+        with open(file_path, newline='') as csvfile:
+            reader = csv_reader(csvfile, delimiter=',')
+            for row in reader:
+                try:
+                    parsed_list = (int(float(row[0])), row[1], row[2], row[3], int(float(row[4])), row[5],
+                                   int(float(row[6])))
+                except:
+                    pass
+
+        if parsed_list[0]==1:
+            y = list(parsed_list)
+            y[0] = 0
+            parsed_list = tuple(y)
+            with open(file_path, 'w+') as file:
+                writer = csv_write(file)
+                writer.writerow(parsed_list)
+            return parsed_list
+
+        return None
+
+    def execute_commands_from_csv(self, cmd_list):
+        """Read data from csv and put in list for alignment
+        Args:
+            file_path (path, must): csv file with RA,DE,0,0,0,apy_time, az,al. Blank lines - no difference.
+        Returns:
+            list for method (set_alignment_from_observations(alignment_list))
+                """
+        _offsetX, _offsetY = 0, 0
+        if cmd_list is not None:
+            if cmd_list[2] == "true":
+                _auto_offset = True
+            else:
+                _offsetX = cmd_list[4]
+                _offsetY = cmd_list[6]
+                # self.sys.control_loop_thread.OL_goal_offset_x_y = [_offsetX, _offsetY]
+                return [_offsetX, _offsetY]
+        return [_offsetX, _offsetY]
 
     def get_alt_az_of_target(self, times=None, time_step=.1):
         """Get the corrected altitude and azimuth angles and rates of the target from the current
@@ -1009,6 +1090,7 @@ class System:
         assert self.is_init, 'System not initialized'
         assert not self.is_busy, 'System is busy'
 
+
         self._logger.info('Starting alignment test, 2x20 positions.')
         pos_LH = [(53, -16), (71, -23), (80, -9), (44, -114), (56, -135), (50, -100), (65, -65),
                   (26, -72), (23, -30), (59, -37), (35, -177), (47, -142), (20, -86), (38, -79),
@@ -1056,9 +1138,9 @@ class System:
                 for trial in range(max_trials):
                     img = self.star_camera.get_next_image()
                     timestamp = apy_time.now()
-                    # TODO: Test
-                    fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
-                    solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate,                                     fov_max_error=.1)
+                    # TODO: Test	
+                    fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600	
+                    solve = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
                     self._logger.debug('TIME:  ' + timestamp.iso)
                     # Save image
                     tiff_write(self.data_folder / (test_time.strftime('%Y-%m-%dT%H%M%S') + '_Alt'
@@ -1203,7 +1285,7 @@ class Alignment:
         self._telescope_ITRF = None  # Tel. location ITRF (xyz) in metres
         self._location = None  # Telescope location astropy EarthLocation
         # Transformation matrices
-        self._MX_itrf2enu = None  # Matrix transforming vectors in ITRF-xyz to ENU-xyz
+        self._MX_itrf2enu = None  # Matrix tranforming vectors in ITRF-xyz to ENU-xyz
         self._MX_enu2itrf = None  # Inverse of above
         self._MX_itrf2mnt = None  # Matrix transforming vectors in ITRF-xyz to MNT-xyz
         self._MX_mnt2itrf = None  # Inverse of above
@@ -1766,7 +1848,7 @@ class Target:
     You may also give a start and end time (e.g. useful for satellite rise and set times) when
     creating the target or by the method Target.set_start_end_time().
 
-    With a target set, get the ITRF_xyz coordinates at your preferred times with
+    With a target set, get the ITRF_xyz coordinates at your prefered times with
     Target.get_target_itrf_xyz().
 
     Note:
@@ -1812,11 +1894,26 @@ class Target:
         """Create an Astropy *SkyCoord* and set as the target.
 
         Args:
-            ra (float): Right ascension in decimal degrees.
-            dec (float): Declination in decimal degrees.
+            ra (float): Right ascension must be 6 digits ex:030031 or -030031
+            dec (float): Declination must be 6 digits ex:891516 or -021500
             start_time (astropy *Time*, optional): The start time to set.
             end_time (astropy *Time*, optional): The end time to set.
         """
+
+        if ((ra[0:1]) == "-"):
+            ra = ra[1:7]
+            ra = int(ra[0:2]) + int(ra[2:4]) / 60 + int(ra[4:6]) / 3600
+            ra = ra * 15 * (-1)
+        else:
+            ra = int(ra[0:2]) + int(ra[2:4]) / 60 + int(ra[4:6]) / 3600
+            ra = ra * 15
+
+        if ((dec[0:1]) == "-"):
+            dec = dec[1:7]
+            dec = (-1) * (int(dec[0:2]) + int(dec[2:4]) / 60 + int(dec[4:6]) / 3600)
+        else:
+            dec = int(dec[0:2]) + int(dec[2:4]) / 60 + int(dec[4:6]) / 3600
+
         self.target_object = apy_coord.SkyCoord(ra, dec, unit='deg')
         self.set_start_end_time(start_time, end_time)
 

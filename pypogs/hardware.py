@@ -1,7 +1,7 @@
 """Hardware interfaces
 ======================
 
-Current hardware support:
+Current harware support:
     - :class:`pypogs.Camera`: 'ptgrey' for FLIR (formerly Point Grey) machine vision cameras. Requires Spinnaker API and PySpin, see the
       installation instructions. Tested with Blackfly S USB3 model BFS-U3-31S4M.
 
@@ -33,13 +33,15 @@ License:
 from pathlib import Path
 import logging
 from time import sleep, time as timestamp
-from datetime import datetime
+from datetime import datetime, time
 from threading import Thread, Event
 from struct import pack as pack_data
+import threading
 
 # External imports:
 import numpy as np
 import serial
+from harvesters.core import Harvester, TimeoutException  # type: ignore
 
 class Camera:
     """Control acquisition and receive images from a camera.
@@ -49,7 +51,7 @@ class Camera:
     auto_init=False is passed). Manually initialise with a call to Camera.initialize(); release hardware with a call to
     Camera.deinitialize().
 
-    After the Camera is initialised, acquisition properties (e.g. exposure_time and frame_rate) may be set and images
+    After the Camera is intialised, acquisition properties (e.g. exposure_time and frame_rate) may be set and images
     received. The Camera also supports event-driven acquisition, see Camera.add_event_callback(), where new images are
     automatically passed on to the desired functions.
 
@@ -83,7 +85,7 @@ class Camera:
             # Release the hardware
             cam.deinitialize()
     """
-    _supported_models = ('ptgrey',)
+    _supported_models = ('ptgrey','phfocus')
 
     def __init__(self, model=None, identity=None, name=None, auto_init=True, debug_folder=None):
         """Create Camera instance. See class documentation."""
@@ -125,6 +127,11 @@ class Camera:
         self._ptgrey_camera = None
         self._ptgrey_camlist = None
         self._ptgrey_system = None
+        #Only used for phfocus
+        self._phfocus_dev = None
+        self._phfocus_ia = None
+        self._phfocus_on_frame_ready = None
+        self._phfocus_is_running = False
         #Callbacks on image event
         self._call_on_image = set()
         self._got_image_event = Event()
@@ -140,8 +147,11 @@ class Camera:
         if name is not None:
             self.name = name
         if auto_init and not None in (model, identity):
-            self._logger.debug('Trying to auto-initialise')
-            self.initialize()
+            try:
+                self._logger.debug('Trying to auto-initialise')
+                self.initialize()
+            except:
+                self._logger.info('Camera initialization failed')
         self._logger.debug('Registering destructor')
         # TODO: Should we register deinitialisor instead? (probably yes...)
         import atexit, weakref
@@ -195,6 +205,30 @@ class Camera:
                 del(self._ptgrey_system)
                 self._ptgrey_system = None
         self._log_debug('Hardware released')
+
+    def _phfocus_release(self):
+        """PRIVATE: Release PhotonFocus hardware resources."""
+        self._log_debug('Photon Focus hardware release called')
+        if self._phfocus_ia:
+            self._phfocus_ia.stop_acquisition()
+            try:
+                self._phfocus_ia.destroy()
+            except:
+                pass
+            del (self._phfocus_ia)
+            self._phfocus_ia = None
+        if self._phfocus_dev:
+            try:
+                self._phfocus_dev.reset()
+            except:
+                pass
+            del (self._phfocus_dev)
+            self._phfocus_dev = None
+        self._log_debug('PhotonFocus Hardware released')
+
+    def set_on_frame_ready(self, on_frame_ready):
+        """Add a method to be called on new frame arrival"""
+        self._phfocus_on_frame_ready = on_frame_ready
 
     @property
     def debug_folder(self):
@@ -286,6 +320,8 @@ class Camera:
                 self._ptgrey_camera = None
                 self._identity = identity
                 self._ptgrey_camlist.Clear()
+        elif self.model.lower() == 'phfocus':
+            self._identity = identity
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -297,6 +333,10 @@ class Camera:
         if not self.model: return False
         if self.model.lower() == 'ptgrey':
             init = self._ptgrey_camera is not None and self._ptgrey_camera.IsInitialized()
+            return init
+        if self.model.lower() == 'phfocus':
+            #TODO: DM finish this
+            init = self._phfocus_dev is not None
             return init
         else:
             self._log_warning('Forbidden model string defined.')
@@ -374,6 +414,86 @@ class Camera:
             self._ptgrey_camera.RegisterEventHandler( self._ptgrey_event_handler )
             self._log_debug('Registered ptgrey image event handler')
             self._log_info('Camera successfully initialised')
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using GenICam, try to initialise')
+            h = Harvester()
+            locs = [
+                r"~/tools/mvImpact/lib/x86_64/mvGenTLProducer.cti",
+                r"C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\mvGenTLProducer.cti"
+            ]
+            cti = ""
+            for loc in locs:
+                if Path(loc).expanduser().exists():
+                    cti = loc
+            if not cti:
+                raise FileNotFoundError("Could not locate cti file: mvGenTLProducer.cti")
+
+            cti = str(Path(cti).expanduser())
+            h.add_file(cti)
+            h.update()
+            # len(h.device_info_list) #For debug purpose
+            # h.device_info_list[0]
+            ia = h.create_image_acquirer(0)
+            self._phfocus_dev = h
+            self._phfocus_ia = ia
+
+            #print('Nodes:', dir(self._phfocus_ia.remote_device.node_map))    # get all available properties of genicam
+            # BASIC SETUP
+            self._log_debug('Setting pixel format to mono12')
+            self._log_debug('Setting acquisition mode to continuous')
+            self._phfocus_ia.remote_device.node_map.PixelFormat.value = 'Mono12'
+            self._phfocus_ia.remote_device.node_map.AcquisitionMode.value = 'Continuous'
+            self._phfocus_ia.remote_device.node_map.EnAcquisitionFrameRate.value = 'True'
+
+            from harvesters.core import Callback
+            class CallbackOnNewBuffer(Callback):
+                """Barebones event handler for phfocus, just pass along the event to the Camera class."""
+                def __init__(self, parent):
+                    super().__init__()
+                    self.parent = parent
+
+                def emit(self, context):
+                    """Read out the image and a timestamp, reshape to array, pass to parent"""
+                    with self.parent._phfocus_ia.fetch_buffer() as buffer:
+                        # Work with the fetched buffer.
+                        """Read out the image and a timestamp, reshape to array, pass to cam object"""
+                        self.parent._log_debug('Image event! Unpack ')
+                        self.parent._image_timestamp = datetime.utcnow()
+                        try:
+                            component = buffer.payload.components[0]
+                            data = component.data.reshape(component.height, component.width)
+                            img = data.copy()
+                            if self.parent._flipX:
+                                img = np.fliplr(img)
+                            if self.parent._flipY:
+                                img = np.flipud(img)
+                            if self.parent._rot90:
+                                img = np.rot90(img, self.parent._rot90)
+                            self.parent._image_data = img
+                        except:
+                            self.parent._log_warning('Failed to read image', exc_info=True)
+                            self.parent._image_data = None
+                        self.parent._got_image_event.set()
+                        self.parent._log_debug('Time: ' + str(self.parent._image_timestamp) \
+                                        + ' Size:' + str(self.parent._image_data.shape) \
+                                        + ' Type:' + str(self.parent._image_data.dtype))
+                        for func in self.parent._call_on_image:
+                            try:
+                                self.parent._log_debug('Calling back to: ' + str(func))
+                                func(self.parent._image_data, self.parent._image_timestamp)
+                            except:
+                                self.parent._log_warning('Failed image callback', exc_info=True)
+                        self.parent._imgs_since_start += 1
+                        self.parent._log_debug('Image event handler finished.')
+                        self.parent._phfocus_is_running = True
+
+            # Add method to the callback method for camera NEW_BUFFER event. PhotonFocus
+            on_new_buffer = CallbackOnNewBuffer(self)
+            ia.add_callback(
+                ia.Events.NEW_BUFFER_AVAILABLE,
+                on_new_buffer
+            )
+
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -402,6 +522,10 @@ class Camera:
                 self._log_exception('Failed to close task')
             self._log_debug('Trying to release PtGrey hardware resources')
             self._ptgrey_release()
+
+        elif self._phfocus_dev:
+            self._log_debug('Found PhtonFocus camera, deinitialising')
+            self._phfocus_release()
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -413,6 +537,10 @@ class Camera:
         if self.model.lower() == 'ptgrey':
             return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'binning', 'size_readout', 'frame_rate_auto',\
                     'frame_rate', 'gain_auto', 'gain', 'exposure_time_auto', 'exposure_time')
+        elif self.model.lower() == 'phfocus':
+            #TODO: check whether its vailidity
+            return ('flip_x', 'flip_y', 'rotate_90', 'plate_scale', 'rotation', 'size_readout',\
+                    'frame_rate', 'gain', 'exposure_time')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -424,6 +552,9 @@ class Camera:
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves: ' +str(self._flipX))
+            return self._flipX
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using phfocus camera. Will flip the received image array ourselves: ' +str(self._flipX))
             return self._flipX
         else:
             self._log_warning('Forbidden model string defined.')
@@ -437,6 +568,10 @@ class Camera:
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves.')
             self._flipX = flip
             self._log_debug('_flipX set to: '+str(self._flipX))
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using phfocus camera. Will flip the received image array ourselves.')
+            self._flipX = flip
+            self._log_debug('_flipX set to: '+str(self._flipX))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -447,7 +582,10 @@ class Camera:
         self._log_debug('Get flip-Y called')
         assert self.is_init, 'Camera must be initialised'
         if self.model.lower() == 'ptgrey':
-            self._log_debug('Using PtGrey camera. Will flip the received image array ourselves: ' +str(self._flipX))
+            self._log_debug('Using PtGrey camera. Will flip the received image array ourselves: ' + str(self._flipY))
+            return self._flipY
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using Phfocus camera. Will flip the received image array ourselves: ' + str(self._flipY))
             return self._flipY
         else:
             self._log_warning('Forbidden model string defined.')
@@ -461,6 +599,10 @@ class Camera:
             self._log_debug('Using PtGrey camera. Will flip the received image array ourselves.')
             self._flipY = flip
             self._log_debug('_flipY set to: '+str(self._flipY))
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using PhotonFocus camera. Will flip the received image array ourselves.')
+            self._flipY = flip
+            self._log_debug('_flipY set to: '+str(self._flipY))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -470,7 +612,7 @@ class Camera:
         """int: Get or set how many times the image should be rotated by 90 degrees. Applied *after* flip_x and flip_y.
         """
         assert self.is_init, 'Camera must be initialised'
-        if self.model.lower() == 'ptgrey':
+        if self.model.lower() == 'ptgrey' or self.model.lower() == 'phfocus':
             return self._rot90
         else:
             self._log_warning('Forbidden model string defined.')
@@ -480,8 +622,8 @@ class Camera:
         self._log_debug('Set rot90 called with: '+str(k))
         assert self.is_init, 'Camera must be initialised'
         k = int(k)
-        if self.model.lower() == 'ptgrey':
-            self._log_debug('Using PtGrey camera. Will rotate the received image array ourselves.')
+        if self.model.lower() == 'ptgrey' or self.model.lower() == 'phfocus':
+            self._log_debug('Using PtGrey or Phfocus camera. Will rotate the received image array ourselves.')
             self._rot90 = k
             self._log_debug('rot90 set to: '+str(self._rot90))
         else:
@@ -534,6 +676,9 @@ class Camera:
                 val = node.GetValue()
                 self._log_debug('Returning not '+str(val))
                 return not val
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Phfocus camera will not use auto frame rate')
+            return False
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -555,6 +700,8 @@ class Camera:
             else:
                 self._log_debug('Setting frame rate')
                 node.SetValue(not auto)
+        elif self.model.lower() == 'ptgrey':
+            self._log_debug('PhFocus auto frame rate will not be used')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -579,6 +726,11 @@ class Camera:
                 val = (node1.GetValue(), node2.GetValue())
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using phfocus frame rate limits')
+            frame_rate_max = self._phfocus_ia.remote_device.node_map.AcquisitionFrameRateMax.value
+            frame_rate_min = 2.1 #Hz
+            return frame_rate_min, frame_rate_max
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -601,6 +753,9 @@ class Camera:
                 val = node.GetValue()
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'phfocus':
+            if self._phfocus_ia:
+                return self._phfocus_ia.remote_device.node_map.AcquisitionFrameRate.value
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -627,6 +782,18 @@ class Camera:
                 try:
                     node.SetValue(frame_rate_hz)
                 except PySpin.SpinnakerException as e:
+                    if 'OutOfRangeException' in e.message:
+                        raise AssertionError('The commanded value is outside the allowed range. See frame_rate_limit')
+                    else:
+                        raise #Rethrows error
+        elif self.model.lower() == 'phfocus':
+            if self._phfocus_ia:
+                try:
+                    if frame_rate_hz< self._phfocus_ia.remote_device.node_map.AcquisitionFrameRateMax.value:
+                        self._phfocus_ia.remote_device.node_map.AcquisitionFrameRate.value = frame_rate_hz
+                    else:
+                        self._log_warning('Frame rate above max limit. Change exposure time.')
+                except self._phfocus_ia as e:
                     if 'OutOfRangeException' in e.message:
                         raise AssertionError('The commanded value is outside the allowed range. See frame_rate_limit')
                     else:
@@ -662,9 +829,13 @@ class Camera:
                 else:
                     self._log_debug('Unexpected return value')
                     raise RuntimeError('Unknow response from camera')
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using phfocus auto gain is always disable')
+            return False
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+
     @gain_auto.setter
     def gain_auto(self, auto):
         self._log_debug('Set gain called with: '+str(auto))
@@ -688,6 +859,8 @@ class Camera:
             else:
                 self._log_debug('Setting gain')
                 node.SetIntValue(node.GetEntryByName(set_to).GetValue())
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Using phfocus auto gain is always disable')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -712,6 +885,11 @@ class Camera:
                 val = (node1.GetValue(), node2.GetValue())
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'phfocus':
+            #TODO: find pffocus gain limits
+            min_g = 0.1
+            max_g = 16
+            return min_g, max_g
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -734,9 +912,14 @@ class Camera:
                 val = node.GetValue()
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'phfocus':
+            gain_val = self._phfocus_ia.remote_device.node_map.Gain.value
+            self._log_debug('Returning '+str(gain_val))
+            return gain_val
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
+
     @gain.setter
     def gain(self, gain_db):
         self._log_debug('Set gain called with: '+str(gain_db))
@@ -764,6 +947,9 @@ class Camera:
                         raise AssertionError('The commanded value is outside the allowed range. See gain_limit')
                     else:
                         raise #Rethrows error
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Setting gain phfocus'+str(gain_db))
+            self._phfocus_ia.remote_device.node_map.Gain.value = gain_db
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -795,6 +981,9 @@ class Camera:
                 else:
                     self._log_debug('Unexpected return value')
                     raise RuntimeError('Unknow response from camera')
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Phfocus auto exposure always disable')
+            return False
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -821,6 +1010,8 @@ class Camera:
             else:
                 self._log_debug('Setting exposure auto to: '+set_to)
                 node.SetIntValue(node.GetEntryByName(set_to).GetValue())
+        elif self.model.lower() == 'phfocus':
+            self._log_debug('Phfocus auto exposure always disable')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -845,6 +1036,11 @@ class Camera:
                 val = (node1.GetValue()/1000, node2.GetValue()/1000)
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'phfocus':
+        #TODO: get exposure limits from camera
+            min_ex = 0.01
+            max_ex = 671
+            return min_ex, max_ex
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -867,6 +1063,11 @@ class Camera:
                 val = node.GetValue() / 1000 #microseconds used in PtGrey
                 self._log_debug('Returning '+str(val))
                 return val
+        elif self.model.lower() == 'phfocus':
+            factor = 1000
+            if self._phfocus_ia:
+                return int(self._phfocus_ia.remote_device.node_map.ExposureTime.value / factor) #out is in ms
+            return 0.0
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -898,6 +1099,11 @@ class Camera:
                                              +' See exposure_time_limit')
                     else:
                         raise #Rethrows error
+        elif self.model.lower() == 'phfocus':
+            factor = 1000   #convert to ms
+            if self._phfocus_ia:
+                self._phfocus_ia.remote_device.node_map.ExposureTime.value = exposure_ms * factor
+            self._log_debug('Setting exposure time phfocus to (ms): ' + str(exposure_ms))
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -924,6 +1130,16 @@ class Camera:
                     self._log_warning('Horzontal and vertical binning is not equal.')
                 return val_horiz
             except PySpin.SpinnakerException:
+                self._log_warning('Failed to read', exc_info=True)
+        elif self.model.lower() == 'phfocus':
+            try:
+                val_horiz = self._phfocus_ia.remote_device.node_map.BinningHorizontal.value
+                val_vert = self._phfocus_ia.remote_device.node_map.BinningVertical.value
+                self._log_debug('Got '+str(val_horiz)+' '+str(val_vert))
+                if val_horiz != val_vert:
+                    self._log_warning('Horzontal and vertical binning is not equal.')
+                return val_horiz
+            except:
                 self._log_warning('Failed to read', exc_info=True)
         else:
             self._log_warning('Forbidden model string defined.')
@@ -958,6 +1174,12 @@ class Camera:
                     raise AssertionError('Not allowed to change binning now.')
                 else:
                     raise #Rethrows error
+        elif self.model.lower() == 'phfocus':
+            try:
+                self._phfocus_ia.remote_device.node_map.BinningHorizontal.value = binning
+                self._phfocus_ia.remote_device.node_map.BinningVertical.value = binning
+            except:
+                self._log_warning('Failure setting binning of phfocus', exc_info=True)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -996,6 +1218,15 @@ class Camera:
                 self._log_debug('Failure reading', exc_info=True)
                 raise
             return (val_w, val_h)
+        elif self.model.lower() == 'phfocus':
+            try:
+                val_w = self._phfocus_ia.remote_device.node_map.WidthMax.value
+                val_h = self._phfocus_ia.remote_device.node_map.HeightMax.value
+                self._log_debug('Got '+str(val_w)+' '+str(val_h))
+            except:
+                self._log_debug('Failure reading', exc_info=True)
+                raise
+            return (val_w, val_h)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1024,6 +1255,15 @@ class Camera:
                 self._log_debug('Failure reading', exc_info=True)
                 raise
             return (val_w, val_h)
+        elif self.model.lower() == 'phfocus':
+            try:
+                val_w = self._phfocus_ia.remote_device.node_map.Width.value
+                val_h = self._phfocus_ia.remote_device.node_map.Height.value
+                self._log_debug('Got '+str(val_w)+' '+str(val_h))
+                return (val_w, val_h)
+            except:
+                self._log_debug('Failure reading', exc_info=True)
+                raise
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1081,6 +1321,37 @@ class Camera:
                     node_offs_y.SetValue(new_offset[1])
                 except PySpin.SpinnakerException:
                     self._log_warning('Failure centering readout', exc_info=True)
+        elif self.model.lower() == 'phfocus':
+            nodemap = self._phfocus_ia.remote_device.node_map
+            self._log_debug('Got nodes for offset and size')
+            try:
+                self._log_debug('Set offsets to zero')
+                nodemap.Width.value = size[0]
+                nodemap.Height.value = size[1]
+                self._log_debug('Set desired size')
+            except:
+                self._log_debug('Failure setting', exc_info=True)
+                raise #Rethrows error
+            self._log_debug('Read max size and set offsets to center.')
+            try:
+                max_size = self.size_max
+            except:
+                self._log_warning('Failure reading max size to center', exc_info=True)
+            new_offset = None
+            try:
+                actual_w = nodemap.Width.value #Read what we set before to be sure
+                actual_h = nodemap.Height.value
+                self._log_debug('Actual and max, w,h {} {} {} {}'.format(actual_w, actual_h, max_size[0], max_size[1]))
+                new_offset = (round((max_size[0] - actual_w) / 2), round((max_size[1] - actual_h) / 2))
+                self._log_debug('Neccessary offset: ' + str(new_offset))
+            except:
+                self._log_warning('Failure centering readout', exc_info=True)
+            if new_offset is not None:
+                try:
+                    nodemap.OffsetX.value = new_offset[0]
+                    nodemap.OffsetY.value = new_offset[1]
+                except:
+                    self._log_warning('Failure centering readout', exc_info=True)
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1123,6 +1394,13 @@ class Camera:
         if not self.is_init: return False
         if self.model.lower() == 'ptgrey':
             return self._ptgrey_camera is not None and self._ptgrey_camera.IsStreaming()
+        elif self.model.lower() == 'phfocus':
+            #TODO: DM finish it
+            if self._image_timestamp is not None:
+                time_since_last_image = (datetime.utcnow() - self._image_timestamp).total_seconds()
+                if time_since_last_image >0.5: #If last image was 1sec ago
+                    self._phfocus_is_running = False
+            return self._phfocus_dev is not None and self._phfocus_is_running
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1146,6 +1424,14 @@ class Camera:
                     self._log_warning('The camera was already streaming...')
                 else:
                     raise RuntimeError('Failed to start camera acquisition') from e
+        elif self.model.lower() == 'phfocus':
+            #TODO: DM finish it, add logs and protections
+            try:
+                self._phfocus_ia.stop_acquisition()
+                self._phfocus_ia.start_acquisition(run_in_background=True)
+            except:
+                self._log_warning('Phfocus camera cant start, trying reconnect..')
+                raise
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1164,6 +1450,13 @@ class Camera:
             except:
                 self._log_debug('Could not stop:', exc_info=True)
                 raise RuntimeError('Failed to stop camera acquisition')
+        elif self.model.lower() == 'phfocus':
+            try:
+                self._phfocus_ia.stop_acquisition()
+                self._phfocus_is_running = False
+            except:
+                self._log_debug('Could not stop PhFocus:', exc_info=True)
+                raise RuntimeError('Failed to stop PhFocus camera acquisition')
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
