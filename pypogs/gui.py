@@ -489,6 +489,7 @@ class LiveViewFrame(ttk.Frame):
         self.canvas_image = None
         self.logger.debug('Creating radiobuttons for camera selection')
 
+        # Top row under live view
         self.logger.debug('Filling bottom frame with interactive controls')
         ttk.Label(self.bottom_frame1, text='Camera (Tracker):').grid(row=0, column=0)
         self.camera_variable = tk.IntVar()
@@ -502,7 +503,7 @@ class LiveViewFrame(ttk.Frame):
         ttk.Radiobutton(self.bottom_frame1, text='Fine (FCL)', variable=self.camera_variable, value=FINE_FCL) \
                 .grid(row=0, column=5, padx=(5,0))
         self.logger.debug('Creating entry and checkbox for image max value control')
-        ttk.Label(self.bottom_frame1, text='Max Value:').grid(row=0, column=6, padx=(30,0))
+        ttk.Label(self.bottom_frame1, text='Max Value:').grid(row=0, column=6, padx=(20,0))
         self.max_entry = ttk.Entry(self.bottom_frame1, width=10)
         self.max_entry.grid(row=0, column=7, padx=(5,0))
         self.auto_max_variable = tk.BooleanVar()
@@ -510,16 +511,14 @@ class LiveViewFrame(ttk.Frame):
         ttk.Checkbutton(self.bottom_frame1, variable=self.auto_max_variable, text='Auto')\
                                                                             .grid(row=0, column=8, padx=(5,0))
 
-        self.annotate_variable = tk.BooleanVar()
-        self.annotate_variable.set(True)
-        self.goal_handles = [None]*4
-        self.offset_handles = [None]*4
-        self.track_circle_handle = None
-        self.search_circle_handle = None
-        self.track_cross_handles = [None]*2
-        ttk.Checkbutton(self.bottom_frame1, text='Annotate', variable=self.annotate_variable) \
-                                                            .grid(row=0, column=9, padx=(30,0))
+        self.logger.debug('Creating entry for quick exposure time control')
+        ttk.Label(self.bottom_frame1, text='Exposure time:').grid(row=0, column=9, padx=(20,0))
+        self.exposure_entry = ttk.Spinbox(self.bottom_frame1, width=10, from_=0, to=10000, increment=.01,
+                                          command=lambda: self.exposure_entry_callback(None))
+        self.exposure_entry.grid(row=0, column=10, padx=(5,0))
+        self.exposure_entry.bind(('<Return>',), self.exposure_entry_callback)
 
+        # Bottom row under live view
         self.set_search_variable = tk.BooleanVar()
         self.set_search_variable.set(False)
         ttk.Checkbutton(self.bottom_frame2, text='Manual Acquire', variable=self.set_search_variable) \
@@ -538,6 +537,16 @@ class LiveViewFrame(ttk.Frame):
         self.set_goal_variable.set(False)
         ttk.Checkbutton(self.bottom_frame2, text='Intercam Alignment', variable=self.set_goal_variable) \
                                                             .grid(row=0, column=5, padx=(50,0))
+                                                            
+        self.annotate_variable = tk.BooleanVar()
+        self.annotate_variable.set(True)
+        self.goal_handles = [None]*4
+        self.offset_handles = [None]*4
+        self.track_circle_handle = None
+        self.search_circle_handle = None
+        self.track_cross_handles = [None]*2
+        ttk.Checkbutton(self.bottom_frame2, text='Annotate', variable=self.annotate_variable) \
+                                                            .grid(row=0, column=6, padx=(50,0))
 
         self.logger.debug('Finished creating. Calling update on self')
         self.update()
@@ -588,6 +597,49 @@ class LiveViewFrame(ttk.Frame):
             except Exception as err:
                 self.logger.debug('Could not set CCL offset', exc_info=True)
                 ErrorPopup(self, err, self.logger)
+
+    def exposure_entry_callback(self, event):
+        """User requested a new exposure time"""
+        if event is None: # Clicked increment or decrement button
+            entry_value = float(self.exposure_entry.get())
+            # Figure out the camera
+            cam = self.camera_variable.get()
+            self.logger.debug('Incrementing exposure for camera: ' + str(cam))
+            updated_value = None
+            if cam == STAR_OL:
+                old_exposure = self.sys.star_camera.exposure_time
+                new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
+                self.sys.star_camera.exposure_time = new_value
+                updated_value = self.sys.star_camera.exposure_time
+            elif cam == COARSE_CCL:
+                old_exposure = self.sys.coarse_camera.exposure_time
+                new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
+                self.sys.coarse_camera.exposure_time = new_value
+                updated_value = self.sys.coarse_camera.exposure_time
+            elif cam == FINE_FCL:
+                old_exposure = self.sys.fine_camera.exposure_time
+                new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
+                self.sys.fine_camera.exposure_time = new_value
+                updated_value = self.sys.fine_camera.exposure_time
+
+        elif event: # Hit enter
+            cam = self.camera_variable.get()
+            new_value = self.exposure_entry.get()
+            self.logger.debug('Hit enter on exposure entry, set to camera ' + str(cam) + ' value ' + str(new_value))
+            updated_value = None
+            if cam == STAR_OL:
+                self.sys.star_camera.exposure_time = new_value
+                updated_value = self.sys.star_camera.exposure_time
+            elif cam == COARSE_CCL:
+                self.sys.coarse_camera.exposure_time = new_value
+                updated_value = self.sys.coarse_camera.exposure_time
+            elif cam == FINE_FCL:
+                self.sys.fine_camera.exposure_time = new_value
+                updated_value = self.sys.fine_camera.exposure_time
+        # Update box afterwords
+        self.logger.debug('Setting exposure time box to ' + str(updated_value))
+        self.exposure_entry.delete(0, 'end')
+        if updated_value: self.exposure_entry.insert(0, updated_value)
 
     def click_canvas_callback(self, event):
         self.logger.debug('Canvas click callback')
@@ -714,6 +766,7 @@ class LiveViewFrame(ttk.Frame):
         track_pos = (None, None)
         search_pos = (None, None)
         search_rad = None
+        exposure = None
         if cam == STAR_OL:
             self.logger.debug('Trying to get star OL data')
             try:
@@ -722,6 +775,7 @@ class LiveViewFrame(ttk.Frame):
                 plate_scale = self.sys.star_camera.plate_scale
                 rotation = self.sys.star_camera.rotation
                 goal_pos = self.sys.control_loop_thread.OL_goal_x_y
+                exposure = self.sys.star_camera.exposure_time
                 try:
                     offset_pos = np.array(goal_pos) + np.array(self.sys.control_loop_thread.OL_goal_offset_x_y)
                 except:
@@ -745,6 +799,7 @@ class LiveViewFrame(ttk.Frame):
                 track_pos = self.sys.coarse_track_thread.track_x_y_absolute
                 search_pos = self.sys.coarse_track_thread.pos_search_x_y
                 search_rad = self.sys.coarse_track_thread.pos_search_rad
+                exposure = self.sys.coarse_camera.exposure_time
             except:
                 self.logger.debug('Failed', exc_info=True)
         elif cam == FINE_FCL:
@@ -764,6 +819,7 @@ class LiveViewFrame(ttk.Frame):
                 track_pos = self.sys.fine_track_thread.track_x_y_absolute
                 search_pos = self.sys.fine_track_thread.pos_search_x_y
                 search_rad = self.sys.fine_track_thread.pos_search_rad
+                exposure = self.sys.fine_camera.exposure_time
             except:
                 self.logger.debug('Failed', exc_info=True)
 
@@ -954,6 +1010,12 @@ class LiveViewFrame(ttk.Frame):
             self.canvas.tag_lower('mean')
             self.canvas.tag_lower('search')
             self.canvas.tag_lower('track')
+
+        # Update exposure box, unless it is in focus
+        if not self.exposure_entry.instate(('focus',)):
+            self.logger.debug('Setting exposure time box to ' + str(exposure))
+            self.exposure_entry.delete(0, 'end')
+            if exposure: self.exposure_entry.insert(0, exposure)
 
         if not self._update_stop:
             self.logger.debug('Calling update on self after {} ms'.format(self._update_after))
