@@ -928,7 +928,7 @@ class Camera:
         This will not affect anything in this class but is used elsewhere. Set this to the physical pixel plate scale
         *before* any binning. When getting the plate scale it will be scaled by the binning factor.
         """
-        return self._plate_scale * self._binning
+        return self._plate_scale * self.binning * (1 if not self.color_bin else 2)
     @plate_scale.setter
     def plate_scale(self, arcsec):
         self._log_debug('Set plate scale called with: '+str(arcsec))
