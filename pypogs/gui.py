@@ -61,10 +61,11 @@ class GUI:
             self.debug_folder = Path(__file__).parent / 'debug'
         else:
             self.debug_folder = debug_folder
-        self._logger = logging.getLogger('pypogs.gui')
-        if not self._logger.hasHandlers():
+
+        self.logger = logging.getLogger('pypogs.gui')
+        if not self.logger.hasHandlers():
             # Add new handlers to the logger if there are none
-            self._logger.setLevel(logging.DEBUG)
+            self.logger.setLevel(logging.DEBUG)
             # Console handler at INFO level
             ch = logging.StreamHandler()
             ch.setLevel(logging.INFO)
@@ -75,17 +76,17 @@ class GUI:
             formatter = logging.Formatter('%(asctime)s:%(name)s-%(levelname)s: %(message)s')
             fh.setFormatter(formatter)
             ch.setFormatter(formatter)
-            self._logger.addHandler(fh)
-            self._logger.addHandler(ch)
+            self.logger.addHandler(fh)
+            self.logger.addHandler(ch)
 
-        self._logger.debug('GUI called with: pypogs_system={} gui_update_ms={}' \
+        self.logger.debug('GUI called with: pypogs_system={} gui_update_ms={}' \
                                                    .format(pypogs_system, gui_update_ms))
         gui_update_ms = int(gui_update_ms)
         self.root = tk.Tk()
         self.root.title('pypogs: the PYthon Portable Optical Ground Station')
         self.root.resizable(False, False)
         self.sys = pypogs_system
-        self._logger.debug('Setting styles')
+        self.logger.debug('Setting styles')
         ttk.Style().configure('TButton', background='gray25', justify='center', anchor='center')
         ttk.Style().configure('TLabel', background='gray25', foreground='white', justify='center', anchor='center')
         ttk.Style().configure('TRadiobutton', background='gray25', foreground='white')
@@ -93,46 +94,46 @@ class GUI:
         ttk.Style().configure('TFrame', background='gray25')
 
         self.root.configure(background='gray25')
-        self._logger.debug('Loading HardwareFrame')
-        self.hardware_frame = HardwareFrame(self.root, self.sys, self._logger)
+        self.logger.debug('Loading HardwareFrame')
+        self.hardware_frame = HardwareFrame(self.root, self.sys, self.logger)
         self.hardware_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=(10,0), sticky=tk.N)
-        self._logger.debug('Loading LiveViewFrame')
-        self.live_frame = LiveViewFrame(self.root, self.sys, self._logger)
+        self.logger.debug('Loading LiveViewFrame')
+        self.live_frame = LiveViewFrame(self.root, self.sys, self.logger)
         self.live_frame.grid(row=0, rowspan=2, column=2, padx=(0,10), pady=10)
         self.live_frame.start(gui_update_ms)
-        self._logger.debug('Configuring main window columns')
+        self.logger.debug('Configuring main window columns')
         self.col1_frame = ttk.Frame(self.root)
         self.col1_frame.grid(row=1, column=0, padx=(10,0), pady=0, sticky=tk.E+tk.W+tk.N)
         self.col2_frame = ttk.Frame(self.root)
         self.col2_frame.grid(row=1, column=1, padx=(0,0), pady=0, sticky=tk.E+tk.W+tk.N)
-        self._logger.debug('Loading MountControlFrame')
-        self.manual_control_frame = MountControlFrame(self.col1_frame, self.sys, self._logger)
+        self.logger.debug('Loading MountControlFrame')
+        self.manual_control_frame = MountControlFrame(self.col1_frame, self.sys, self.logger)
         self.manual_control_frame.grid(column=0, pady=(0,10), sticky=tk.E+tk.W+tk.N)
         self.manual_control_frame.start(gui_update_ms)
-        self._logger.debug('Loading AlignmentFrame')
-        self.alignment_frame = AlignmentFrame(self.col1_frame, self.sys, self._logger)
+        self.logger.debug('Loading AlignmentFrame')
+        self.alignment_frame = AlignmentFrame(self.col1_frame, self.sys, self.logger)
         self.alignment_frame.grid(column=0, pady=(0,10), sticky=tk.E+tk.W+tk.N)
         self.alignment_frame.start(gui_update_ms)
 
-        self._logger.debug('Loading TargetFrame')
-        self.target_frame = TargetFrame(self.col1_frame, self.sys, self._logger)
+        self.logger.debug('Loading TargetFrame')
+        self.target_frame = TargetFrame(self.col1_frame, self.sys, self.logger)
         self.target_frame.grid(column=0, pady=(0,10), sticky=tk.E+tk.W+tk.N)
         self.target_frame.start(gui_update_ms)
-        self._logger.debug('Loading ControlPropertiesFrame')
-        self.control_prop_frame = ControlPropertiesFrame(self.col1_frame, self.sys, self._logger)
+        self.logger.debug('Loading ControlPropertiesFrame')
+        self.control_prop_frame = ControlPropertiesFrame(self.col1_frame, self.sys, self.logger)
         self.control_prop_frame.grid(column=0, pady=(0,10), sticky=tk.E+tk.W+tk.N)
-        self._logger.debug('Loading TrackingControlFrame')
-        self.tracking_control_frame = TrackingControlFrame(self.col1_frame, self.sys, self._logger)
+        self.logger.debug('Loading TrackingControlFrame')
+        self.tracking_control_frame = TrackingControlFrame(self.col1_frame, self.sys, self.logger)
         self.tracking_control_frame.grid(column=0, pady=(0,10), sticky=tk.E+tk.W+tk.N)
         self.tracking_control_frame.start(gui_update_ms)
 
-        self._logger.debug('Loading StatusFrame')
-        self.status_frame = StatusFrame(self.col2_frame, self.sys, self._logger)
+        self.logger.debug('Loading StatusFrame')
+        self.status_frame = StatusFrame(self.col2_frame, self.sys, self.logger)
         self.status_frame.grid(column=0, pady=(0,10), sticky=tk.E+tk.W+tk.N)
         self.status_frame.start(gui_update_ms)
 
-        self._logger.info('pypogs GUI created')
-        self._logger.debug('Setting delete function and starting tkinter mainloop')
+        self.logger.info('pypogs GUI created')
+        self.logger.debug('Setting delete function and starting tkinter mainloop')
 
         self.root.protocol('WM_DELETE_WINDOW', self.__del__)
         self.root.mainloop()
@@ -173,15 +174,21 @@ class GUI:
 class ControlPropertiesFrame(ttk.Frame):
     """Extends tkinter.Frame for setting up control loop parameters"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating ControlPropertiesFrame')
+        self.logger = logger
+        self.logger.debug('Creating ControlPropertiesFrame')
         super().__init__(master)
         self.sys = pypogs_system
-        ttk.Label(self, text='Controller Properties').grid(row=0, column=0, columnspan=2)
-        tk.Frame(self, height=1, bg='gray50').grid(row=1, column=0, columnspan=2, pady=(0,5), sticky=tk.W+tk.E)
-        ttk.Button(self, text='Feedback', command=self.controller_callback, width=15).grid(row=2, column=0, columnspan=2, sticky=tk.E+tk.W)
-        ttk.Button(self, text='Coarse Tracker', command=self.coarse_callback, width=15).grid(row=3, column=0)
-        ttk.Button(self, text='Fine Tracker', command=self.fine_callback, width=15).grid(row=3, column=1)
+
+        self.logger.debug('Creating label and buttons')
+        ttk.Label(self, text='Controller Properties').pack(fill=tk.BOTH, expand=True)
+        tk.Frame(self, height=1, bg='gray50').pack(fill=tk.BOTH, expand=True)
+
+        ttk.Button(self, text='Feedback', command=self.controller_callback, width=12) \
+                                                                .pack(fill=tk.BOTH, expand=True)
+        ttk.Button(self, text='Coarse Tracker', command=self.coarse_callback, width=12) \
+                                                                .pack(fill=tk.BOTH, expand=True)
+        ttk.Button(self, text='Fine Tracker', command=self.fine_callback, width=12) \
+                                                                .pack(fill=tk.BOTH, expand=True)
         self.controller_popup = None
         self.coarse_popup = None
         self.fine_popup = None
@@ -195,8 +202,8 @@ class ControlPropertiesFrame(ttk.Frame):
                 self.controller_popup.update()
                 self.controller_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open feedback popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open feedback popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def coarse_callback(self):
         try:
@@ -208,8 +215,8 @@ class ControlPropertiesFrame(ttk.Frame):
                 self.coarse_popup.update()
                 self.coarse_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Failed to popup coarse control popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Failed to popup coarse control popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def fine_callback(self):
         try:
@@ -221,15 +228,15 @@ class ControlPropertiesFrame(ttk.Frame):
                 self.fine_popup.update()
                 self.fine_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Failed to popup fine control popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Failed to popup fine control popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
 
     class ControlPopup(tk.Toplevel):
         """Extends tk.Toplevel for controller settings"""
         def __init__(self, master, device, title='Control'):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master._logger
+            self.logger = master.logger
             self.device = device
             self.title(title)
             self.resizable(False, False)
@@ -242,13 +249,13 @@ class ControlPropertiesFrame(ttk.Frame):
             self.update()
 
         def update(self):
-            self._logger.debug('ControlPopup got update request')
+            self.logger.debug('ControlPopup got update request')
             #if self.properties_frame is not None: self.properties_frame.destroy()
             try:
                 property_list = self.device.available_properties
             except (AssertionError, AttributeError):
                 property_list = None
-                self._logger.debug('Got no properties to list', exc_info=True)
+                self.logger.debug('Got no properties to list', exc_info=True)
             i = 0
             if property_list is not None:
                 # Keep track of position
@@ -276,7 +283,7 @@ class ControlPropertiesFrame(ttk.Frame):
                         entry.insert(0, value)
                         label['text'] = name
                     except AttributeError as err:
-                        ErrorPopup(self, err, self._logger)
+                        ErrorPopup(self, err, self.logger)
 
                     try:
                         self.property_entries[i] = (name, entry, value, label)
@@ -293,7 +300,7 @@ class ControlPropertiesFrame(ttk.Frame):
                 i += 1
 
         def set_properties(self):
-            self._logger.debug('Got set properties. Here are the entries:')
+            self.logger.debug('Got set properties. Here are the entries:')
             for name, entry, old_value, label in self.property_entries:
                 new_value = entry.get()
                 if not new_value == old_value:
@@ -304,36 +311,36 @@ class ControlPropertiesFrame(ttk.Frame):
                             parsed = parse_expression(new_value)
                         except Exception as err:
                             parsed = None
-                            ErrorPopup(self, err, self._logger)
+                            ErrorPopup(self, err, self.logger)
 #                    if parsed is not None:
                     try:
                         setattr(self.device, name, parsed)
-                        self._logger.debug('Set ' + str(name) + ' to: ' + str(parsed))
+                        self.logger.debug('Set ' + str(name) + ' to: ' + str(parsed))
                     except Exception as err:
-                        ErrorPopup(self, err, self._logger)
+                        ErrorPopup(self, err, self.logger)
                 else:
-                    self._logger.debug('Did not change: ' + str(name))
+                    self.logger.debug('Did not change: ' + str(name))
             self.update()
 
 
 class TrackingControlFrame(ttk.Frame):
     """Extends tkinter.Frame for starting and stopping tracking"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating TrackingControlFrame')
+        self.logger = logger
+        self.logger.debug('Creating TrackingControlFrame')
         super().__init__(master)
         self.sys = pypogs_system
         self._update_stop = True
         self._update_after = 1000
         
-        self._logger.debug('Creating label and buttons')
+        self.logger.debug('Creating label and buttons')
 
         ttk.Label(self, text='Tracking').pack(fill=tk.BOTH, expand=True)
         tk.Frame(self, height=1, bg='gray50').pack(fill=tk.BOTH, expand=True)
 
         input_frame = ttk.Frame(self)
         input_frame.pack(fill=tk.BOTH, expand=True)
-        self._logger.debug('Creating checkboxes')
+        self.logger.debug('Creating checkboxes')
         self.enable_ccl = tk.BooleanVar()
         self.enable_ctfsp = tk.BooleanVar()
         self.enable_fcl = tk.BooleanVar()
@@ -364,7 +371,7 @@ class TrackingControlFrame(ttk.Frame):
         self.update()
 
     def update(self):
-        self._logger.debug('TrackingControlFrame got update request')
+        self.logger.debug('TrackingControlFrame got update request')
         self.enable_ccl.set(self.sys.control_loop_thread.CCL_enable)
         self.enable_ctfsp.set(self.sys.control_loop_thread.CTFSP_enable)
         self.enable_fcl.set(self.sys.control_loop_thread.FCL_enable)
@@ -377,7 +384,7 @@ class TrackingControlFrame(ttk.Frame):
         else:
             self.auto_fine.set(False)
         if not self._update_stop:
-            self._logger.debug('TrackingControlFrame updating self after {} ms'.format(self._update_after))
+            self.logger.debug('TrackingControlFrame updating self after {} ms'.format(self._update_after))
             self.after(self._update_after, self.update)
 
     def coarse_callback(self):
@@ -385,76 +392,76 @@ class TrackingControlFrame(ttk.Frame):
             assert self.sys.coarse_track_thread is not None, 'No coarse tracker (requires mount and coarse camera).'
             self.sys.coarse_track_thread.auto_acquire_track = self.auto_coarse.get()
         except Exception as err:
-            self._logger.debug('Could not set coarse to auto', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not set coarse to auto', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def fine_callback(self):
         try:
             assert self.sys.fine_track_thread is not None, 'No fine tracker (requires mount and fine camera).'
             self.sys.fine_track_thread.auto_acquire_track = self.auto_fine.get()
         except Exception as err:
-            self._logger.debug('Could not set fine to auto', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not set fine to auto', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def enable_callback(self):
         try:
             self.sys.control_loop_thread.CCL_enable = self.enable_ccl.get()
         except Exception as err:
-            self._logger.debug('Could not set CCL enable', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not set CCL enable', exc_info=True)
+            ErrorPopup(self, err, self.logger)
         try:
             self.sys.control_loop_thread.CTFSP_enable = self.enable_ctfsp.get()
         except Exception as err:
-            self._logger.debug('Could not set CTFSP enable', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not set CTFSP enable', exc_info=True)
+            ErrorPopup(self, err, self.logger)
         try:
             self.sys.control_loop_thread.FCL_enable = self.enable_fcl.get()
         except Exception as err:
-            self._logger.debug('Could not set FCL enable', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not set FCL enable', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 #        self.update()
 
     def start_tracking_callback(self):
         if self.sys.mount is not None and self.sys.mount.is_init and self.sys.mount._is_sidereal_tracking:
-            self._logger.debug('Sidereal tracking is on.  Will turn off.')
+            self.logger.debug('Sidereal tracking is on.  Will turn off.')
             self.sys.mount.stop_sidereal_tracking()
         try:
             self.sys.start_tracking()
         except Exception as err:
-            self._logger.debug('Did not start tracking', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Did not start tracking', exc_info=True)
+            ErrorPopup(self, err, self.logger)
     def stop_tracking_callback(self):
-        self._logger.debug('TrackingControlFrame got stop request')
+        self.logger.debug('TrackingControlFrame got stop request')
         try:
             self.sys.stop()
         except Exception as err:
-            self._logger.debug('Did not stop', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Did not stop', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def start(self, after=None):
         """Give number of milliseconds to wait between updates."""
-        self._logger.debug('TrackingControlFrame got start request with after={}'.format(after))
+        self.logger.debug('TrackingControlFrame got start request with after={}'.format(after))
         if after is not None: self._update_after = after
         self._update_stop = False
         self.update()
 
     def stop(self):
         """Stop updating."""
-        self._logger.debug('TrackingControlFrame got stop request')
+        self.logger.debug('TrackingControlFrame got stop request')
         self._update_stop = True
 
 
 class LiveViewFrame(ttk.Frame):
     """Extends tkinter.Frame for showing live camera images"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating LiveViewFrame')
+        self.logger = logger
+        self.logger.debug('Creating LiveViewFrame')
         super().__init__(master)
         self.sys = pypogs_system
         self._update_after = 1000
         self._update_stop = True
 
-        self._logger.debug('Creating Frames')
+        self.logger.debug('Creating Frames')
         self.image_frame = ttk.Frame(self)
         self.image_frame.grid(row=1, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
         self.top_frame = ttk.Frame(self)
@@ -464,7 +471,7 @@ class LiveViewFrame(ttk.Frame):
         self.bottom_frame2 = ttk.Frame(self)
         self.bottom_frame2.grid(row=3, column=0, pady=(5,0))
 
-        self._logger.debug('Filling top frame with label')
+        self.logger.debug('Filling top frame with label')
         ttk.Label(self.top_frame, text='Live View and Interactive Control').grid(row=0, column=0, padx=(250,0))
         self.zoom_variable = tk.IntVar()
         self.zoom_variable.set(1)
@@ -478,7 +485,7 @@ class LiveViewFrame(ttk.Frame):
         ttk.Radiobutton(self.top_frame, text='8x', variable=self.zoom_variable, value=8) \
                 .grid(row=0, column=5, padx=(5,0))
 
-        self._logger.debug('Creating image canvas')
+        self.logger.debug('Creating image canvas')
         self.canvas_size = (800, 640)
         self.image_size = self.canvas_size
         self.image_scale = 1
@@ -487,9 +494,10 @@ class LiveViewFrame(ttk.Frame):
         self.canvas.bind("<Button-1>", self.click_canvas_callback)
         self.tk_image = None
         self.canvas_image = None
-        self._logger.debug('Creating radiobuttons for camera selection')
+        self.logger.debug('Creating radiobuttons for camera selection')
 
-        self._logger.debug('Filling bottom frame with interactive controls')
+        # Top row under live view
+        self.logger.debug('Filling bottom frame with interactive controls')
         ttk.Label(self.bottom_frame1, text='Camera (Tracker):').grid(row=0, column=0)
         self.camera_variable = tk.IntVar()
         self.camera_variable.set(NONE)
@@ -501,8 +509,8 @@ class LiveViewFrame(ttk.Frame):
                 .grid(row=0, column=4, padx=(5,0))
         ttk.Radiobutton(self.bottom_frame1, text='Fine (FCL)', variable=self.camera_variable, value=FINE_FCL) \
                 .grid(row=0, column=5, padx=(5,0))
-        self._logger.debug('Creating entry and checkbox for image max value control')
-        ttk.Label(self.bottom_frame1, text='Max Value:').grid(row=0, column=6, padx=(30,0))
+        self.logger.debug('Creating entry and checkbox for image max value control')
+        ttk.Label(self.bottom_frame1, text='Max Value:').grid(row=0, column=6, padx=(20,0))
         self.max_entry = ttk.Entry(self.bottom_frame1, width=10)
         self.max_entry.grid(row=0, column=7, padx=(5,0))
         self.auto_max_variable = tk.BooleanVar()
@@ -510,16 +518,14 @@ class LiveViewFrame(ttk.Frame):
         ttk.Checkbutton(self.bottom_frame1, variable=self.auto_max_variable, text='Auto')\
                                                                             .grid(row=0, column=8, padx=(5,0))
 
-        self.annotate_variable = tk.BooleanVar()
-        self.annotate_variable.set(True)
-        self.goal_handles = [None]*4
-        self.offset_handles = [None]*4
-        self.track_circle_handle = None
-        self.search_circle_handle = None
-        self.track_cross_handles = [None]*2
-        ttk.Checkbutton(self.bottom_frame1, text='Annotate', variable=self.annotate_variable) \
-                                                            .grid(row=0, column=9, padx=(30,0))
+        self.logger.debug('Creating entry for quick exposure time control')
+        ttk.Label(self.bottom_frame1, text='Exposure time:').grid(row=0, column=9, padx=(20,0))
+        self.exposure_entry = ttk.Spinbox(self.bottom_frame1, width=10, from_=0, to=10000, increment=.01,
+                                          command=lambda: self.exposure_entry_callback(None))
+        self.exposure_entry.grid(row=0, column=10, padx=(5,0))
+        self.exposure_entry.bind(('<Return>',), self.exposure_entry_callback)
 
+        # Bottom row under live view
         self.set_search_variable = tk.BooleanVar()
         self.set_search_variable.set(False)
         ttk.Checkbutton(self.bottom_frame2, text='Manual Acquire', variable=self.set_search_variable) \
@@ -539,105 +545,158 @@ class LiveViewFrame(ttk.Frame):
         ttk.Checkbutton(self.bottom_frame2, text='Intercam Alignment', variable=self.set_goal_variable) \
                                                             .grid(row=0, column=5, padx=(50,0))
 
-        self._logger.debug('Finished creating. Calling update on self')
+        self.annotate_variable = tk.BooleanVar()
+        self.annotate_variable.set(True)
+        self.goal_handles = [None]*4
+        self.offset_handles = [None]*4
+        self.track_circle_handle = None
+        self.search_circle_handle = None
+        self.track_cross_handles = [None]*2
+        ttk.Checkbutton(self.bottom_frame2, text='Annotate', variable=self.annotate_variable) \
+                                                            .grid(row=0, column=6, padx=(50,0))											
+
+        self.logger.debug('Finished creating. Calling update on self')
         self.update()
 
     def clear_tracker_callback(self):
         """Clear the track and the offset of the current tracker."""
-        self._logger.debug('Clicked on clear tracker')
+        self.logger.debug('Clicked on clear tracker')
         cam = self.camera_variable.get()
         if cam == STAR_OL:
-            self._logger.info('Clearing OL tracker.')
+            self.logger.info('Clearing OL tracker.')
             try: #Only set offset to zero, there is nothing else to do
                 self.sys.control_loop_thread.OL_goal_offset_x_y = (0,0)
             except Exception as err:
-                self._logger.debug('Could not clear coarse tracker', exc_info=True)
-                ErrorPopup(self, err, self._logger)
+                self.logger.debug('Could not clear coarse tracker', exc_info=True)
+                ErrorPopup(self, err, self.logger)
         elif cam == COARSE_CCL:
-            self._logger.info('Clearing CCL tracker.')
+            self.logger.info('Clearing CCL tracker.')
             try:
                 self.sys.coarse_track_thread.spot_tracker.clear_tracker()
             except Exception as err:
-                self._logger.debug('Could not clear coarse tracker', exc_info=True)
-                ErrorPopup(self, err, self._logger)
+                self.logger.debug('Could not clear coarse tracker', exc_info=True)
+                ErrorPopup(self, err, self.logger)
         elif cam == FINE_FCL:
-            self._logger.info('Clearing FCL tracker.')
+            self.logger.info('Clearing FCL tracker.')
             try:
                 self.sys.fine_track_thread.spot_tracker.clear_tracker()
             except Exception as err:
-                self._logger.debug('Could not clear fine tracker', exc_info=True)
-                ErrorPopup(self, err, self._logger)
+                self.logger.debug('Could not clear fine tracker', exc_info=True)
+                ErrorPopup(self, err, self.logger)
         else:
-            self._logger.debug('No camera selected in clear tracker callback')
+            self.logger.debug('No camera selected in clear tracker callback')
 
     def clear_offset_callback(self):
         """Clear the offset *of the preceding tracker*."""
-        self._logger.debug('Clicked on clear offset')
+        self.logger.debug('Clicked on clear offset')
         cam = self.camera_variable.get()
         if cam == COARSE_CCL or cam == STAR_OL:
-            self._logger.info('Clearing OL offset.')
+            self.logger.info('Clearing OL offset.')
             try:
                 self.sys.control_loop_thread.OL_goal_offset_x_y = (0,0)
             except Exception as err:
-                self._logger.debug('Could not set OL offset', exc_info=True)
-                ErrorPopup(self, err, self._logger)
+                self.logger.debug('Could not set OL offset', exc_info=True)
+                ErrorPopup(self, err, self.logger)
         elif cam == FINE_FCL:
-            self._logger.info('Clearing CCL offset.')
+            self.logger.info('Clearing CCL offset.')
             try:
                 self.sys.coarse_track_thread.goal_offset_x_y = np.array((0,0))
             except Exception as err:
-                self._logger.debug('Could not set CCL offset', exc_info=True)
-                ErrorPopup(self, err, self._logger)
+                self.logger.debug('Could not set CCL offset', exc_info=True)
+                ErrorPopup(self, err, self.logger)
+
+    def exposure_entry_callback(self, event):
+        """User requested a new exposure time"""
+        if event is None: # Clicked increment or decrement button
+            entry_value = float(self.exposure_entry.get())
+            # Figure out the camera
+            cam = self.camera_variable.get()
+            self.logger.debug('Incrementing exposure for camera: ' + str(cam))
+            updated_value = None
+            if cam == STAR_OL:
+                old_exposure = self.sys.star_camera.exposure_time
+                new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
+                self.sys.star_camera.exposure_time = new_value
+                updated_value = self.sys.star_camera.exposure_time
+            elif cam == COARSE_CCL:
+                old_exposure = self.sys.coarse_camera.exposure_time
+                new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
+                self.sys.coarse_camera.exposure_time = new_value
+                updated_value = self.sys.coarse_camera.exposure_time
+            elif cam == FINE_FCL:
+                old_exposure = self.sys.fine_camera.exposure_time
+                new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
+                self.sys.fine_camera.exposure_time = new_value
+                updated_value = self.sys.fine_camera.exposure_time
+
+        elif event: # Hit enter
+            cam = self.camera_variable.get()
+            new_value = self.exposure_entry.get()
+            self.logger.debug('Hit enter on exposure entry, set to camera ' + str(cam) + ' value ' + str(new_value))
+            updated_value = None
+            if cam == STAR_OL:
+                self.sys.star_camera.exposure_time = new_value
+                updated_value = self.sys.star_camera.exposure_time
+            elif cam == COARSE_CCL:
+                self.sys.coarse_camera.exposure_time = new_value
+                updated_value = self.sys.coarse_camera.exposure_time
+            elif cam == FINE_FCL:
+                self.sys.fine_camera.exposure_time = new_value
+                updated_value = self.sys.fine_camera.exposure_time
+        # Update box afterwords
+        self.logger.debug('Setting exposure time box to ' + str(updated_value))
+        self.exposure_entry.delete(0, 'end')
+        if updated_value: self.exposure_entry.insert(0, updated_value)											 
 
     def click_canvas_callback(self, event):
-        self._logger.debug('Canvas click callback')
+        self.logger.debug('Canvas click callback')
         if event.x > self.image_size[0] or event.y > self.image_size[1]:
-            self._logger.debug('Outside image')
+            self.logger.debug('Outside image')
             x_image = None
             y_image = None
         else:
             x_image = event.x - self.image_size[0] / 2
             y_image = self.image_size[1] / 2 - event.y #Camera coordinates are opposite
-            self._logger.debug('Image coordinates x:' + str(x_image) + ' y:' + str(y_image))
+            self.logger.debug('Image coordinates x:' + str(x_image) + ' y:' + str(y_image))
         if self.set_goal_variable.get() and not None in (x_image, y_image):
             cam = self.camera_variable.get()
             if cam == STAR_OL:
-                self._logger.debug('Setting goal for OL tracker from Star camera')
+                self.logger.debug('Setting goal for OL tracker from Star camera')
                 try:
                     plate_scale = self.sys.star_camera.plate_scale
                     goal = [x_image / self.image_scale * plate_scale, y_image / self.image_scale * plate_scale]
-                    self._logger.info('Setting OL goal to: ' + str(goal))
+                    self.logger.info('Setting OL goal to: ' + str(goal))
                     self.sys.control_loop_thread.OL_goal_x_y = goal
                 except Exception as err:
-                    self._logger.debug('Could not set OL goal', exc_info=True)
-                    ErrorPopup(self, err, self._logger)
+                    self.logger.debug('Could not set OL goal', exc_info=True)
+                    ErrorPopup(self, err, self.logger)
             elif cam == COARSE_CCL:
-                self._logger.debug('Setting goal for CCL tracker from Coarse camera')
+                self.logger.debug('Setting goal for CCL tracker from Coarse camera')
                 try:
                     plate_scale = self.sys.coarse_camera.plate_scale
                     goal = [x_image / self.image_scale * plate_scale, y_image / self.image_scale * plate_scale]
-                    self._logger.info('Setting coarse goal to: ' + str(goal))
+                    self.logger.info('Setting coarse goal to: ' + str(goal))
                     self.sys.coarse_track_thread.goal_x_y = goal
                 except Exception as err:
-                    self._logger.debug('Could not set CCL goal', exc_info=True)
-                    ErrorPopup(self, err, self._logger)
+                    self.logger.debug('Could not set CCL goal', exc_info=True)
+                    ErrorPopup(self, err, self.logger)
             elif cam == FINE_FCL:
-                self._logger.debug('Setting goal for FCL tracker from Fine camera')
+                self.logger.debug('Setting goal for FCL tracker from Fine camera')
                 try:
                     plate_scale = self.sys.fine_camera.plate_scale
                     goal = [x_image / self.image_scale * plate_scale, y_image / self.image_scale * plate_scale]
-                    self._logger.info('Setting fine goal to: ' + str(goal))
+                    self.logger.info('Setting fine goal to: ' + str(goal))
                     self.sys.fine_track_thread.goal_x_y = goal
                 except Exception as err:
-                    self._logger.debug('Could not set FCL goal', exc_info=True)
-                    ErrorPopup(self, err, self._logger)
+                    self.logger.debug('Could not set FCL goal', exc_info=True)
+                    ErrorPopup(self, err, self.logger)
             else:
-                self._logger.debug('No camera selected in canvas click callback')
+                self.logger.debug('No camera selected in canvas click callback')
             self.set_goal_variable.set(False)
         elif self.add_offset_variable.get() and not None in (x_image, y_image):
             cam = self.camera_variable.get()
             if cam == STAR_OL:
-                self._logger.debug('Setting offset for OL tracker from Coarse camera')
+                self.logger.debug('Setting offset for OL tracker from Coarse camera')
                 try:
                     plate_scale = self.sys.star_camera.plate_scale
                     rotation = self.sys.star_camera.rotation
@@ -646,14 +705,14 @@ class LiveViewFrame(ttk.Frame):
                     rotmx = np.array([[np.cos(np.deg2rad(rotation)), np.sin(np.deg2rad(rotation))],
                                   [-np.sin(np.deg2rad(rotation)), np.cos(np.deg2rad(rotation))]])
                     offset = rotmx @ offset
-                    self._logger.info('Subtracting from OL offset: ' + str(offset))
+                    self.logger.info('Subtracting from OL offset: ' + str(offset))
                     old_offset = self.sys.control_loop_thread.OL_goal_offset_x_y
                     self.sys.control_loop_thread.OL_goal_offset_x_y = np.array(old_offset) - offset
                 except Exception as err:
-                    self._logger.debug('Could not set OL offset', exc_info=True)
-                    ErrorPopup(self, err, self._logger)
+                    self.logger.debug('Could not set OL offset', exc_info=True)
+                    ErrorPopup(self, err, self.logger)
             elif cam == COARSE_CCL:
-                self._logger.debug('Setting offset for OL tracker from Coarse camera')
+                self.logger.debug('Setting offset for OL tracker from Coarse camera')
                 try:
                     plate_scale = self.sys.coarse_camera.plate_scale
                     rotation = self.sys.coarse_camera.rotation
@@ -662,14 +721,14 @@ class LiveViewFrame(ttk.Frame):
                     rotmx = np.array([[np.cos(np.deg2rad(rotation)), np.sin(np.deg2rad(rotation))],
                                   [-np.sin(np.deg2rad(rotation)), np.cos(np.deg2rad(rotation))]])
                     offset = rotmx @ offset
-                    self._logger.info('Subtracting from OL offset: ' + str(offset))
+                    self.logger.info('Subtracting from OL offset: ' + str(offset))
                     old_offset = self.sys.control_loop_thread.OL_goal_offset_x_y
                     self.sys.control_loop_thread.OL_goal_offset_x_y = np.array(old_offset) - offset
                 except Exception as err:
-                    self._logger.debug('Could not set OL offset', exc_info=True)
-                    ErrorPopup(self, err, self._logger)
+                    self.logger.debug('Could not set OL offset', exc_info=True)
+                    ErrorPopup(self, err, self.logger)
             elif cam == FINE_FCL:
-                self._logger.debug('Setting offset for CCL tracker from Fine camera')
+                self.logger.debug('Setting offset for CCL tracker from Fine camera')
                 try:
                     plate_scale = self.sys.fine_camera.plate_scale
                     rotation_fine = self.sys.fine_camera.rotation
@@ -681,44 +740,44 @@ class LiveViewFrame(ttk.Frame):
                     rotmx2 = np.array([[np.cos(np.deg2rad(rotation_coarse)), -np.sin(np.deg2rad(rotation_coarse))],
                                   [np.sin(np.deg2rad(rotation_coarse)), np.cos(np.deg2rad(rotation_coarse))]])
                     offset = rotmx2 @ (rotmx1 @ offset)
-                    self._logger.info('Subtracting from CCL offset: ' + str(offset))
+                    self.logger.info('Subtracting from CCL offset: ' + str(offset))
                     old_offset = self.sys.coarse_track_thread.goal_offset_x_y
                     self.sys.coarse_track_thread.goal_offset_x_y = np.array(old_offset) - offset
                 except Exception as err:
-                    self._logger.debug('Could not set CCL offset', exc_info=True)
-                    ErrorPopup(self, err, self._logger)
+                    self.logger.debug('Could not set CCL offset', exc_info=True)
+                    ErrorPopup(self, err, self.logger)
             else:
-                self._logger.debug('No camera selected in canvas click callback')
+                self.logger.debug('No camera selected in canvas click callback')
             self.add_offset_variable.set(False)
         elif self.set_search_variable.get() and not None in (x_image, y_image):
             cam = self.camera_variable.get()
             if cam == COARSE_CCL:
-                self._logger.debug('Setting search pos for CCL')
+                self.logger.debug('Setting search pos for CCL')
                 plate_scale = self.sys.coarse_camera.plate_scale
                 search_pos = [x_image / self.image_scale * plate_scale, y_image / self.image_scale * plate_scale]
-                self._logger.info('Setting coarse search position to: ' + str(search_pos))
+                self.logger.info('Setting coarse search position to: ' + str(search_pos))
                 self.sys.coarse_track_thread.pos_search_x_y = search_pos
             elif cam == FINE_FCL:
-                self._logger.debug('Setting search pos for CCL')
+                self.logger.debug('Setting search pos for CCL')
                 plate_scale = self.sys.fine_camera.plate_scale
                 search_pos = [x_image / self.image_scale * plate_scale, y_image / self.image_scale * plate_scale]
-                self._logger.info('Setting fine search position to: ' + str(search_pos))
+                self.logger.info('Setting fine search position to: ' + str(search_pos))
                 self.sys.fine_track_thread.pos_search_x_y = search_pos
             else:
-                self._logger.error('No camera selected in canvas click callback')
+                self.logger.error('No camera selected in canvas click callback')
             self.set_search_variable.set(False)
 
     def update(self):
         """Update the canvas with an image"""
-        self._logger.debug('LiveViewFrame got update request')
+        self.logger.debug('LiveViewFrame got update request')
         # Read desired camera
         cam = self.camera_variable.get()
-        self._logger.debug('Selected camera is {} (1 star, 2 coarse, 3 fine, 0 none)'.format(cam))
+        self.logger.debug('Selected camera is {} (1 star, 2 coarse, 3 fine, 0 none)'.format(cam))
         # Check if we have it, otherwise switch to none
         if cam == STAR_OL and (self.sys.star_camera is None or not self.sys.star_camera.is_init): cam = NONE
         if cam == COARSE_CCL and (self.sys.coarse_camera is None or not self.sys.coarse_camera.is_init): cam = NONE
         if cam == FINE_FCL and (self.sys.fine_camera is None or not self.sys.fine_camera.is_init): cam = NONE
-        self._logger.debug('After validity checks setting camera to {}'.format(cam))
+        self.logger.debug('After validity checks setting camera to {}'.format(cam))
         self.camera_variable.set(cam)
         img = None
         goal_pos = (None, None)
@@ -730,22 +789,24 @@ class LiveViewFrame(ttk.Frame):
         track_pos = (None, None)
         search_pos = (None, None)
         search_rad = None
+        exposure = None
         if cam == STAR_OL:
-            self._logger.debug('Trying to get star OL data')
+            self.logger.debug('Trying to get star OL data')
             try:
                 if not self.sys.star_camera.is_running: self.sys.star_camera.start()
                 img = self.sys.star_camera.get_latest_image()
                 plate_scale = self.sys.star_camera.plate_scale
                 rotation = self.sys.star_camera.rotation
                 goal_pos = self.sys.control_loop_thread.OL_goal_x_y
+                exposure = self.sys.star_camera.exposure_time
                 try:
                     offset_pos = np.array(goal_pos) + np.array(self.sys.control_loop_thread.OL_goal_offset_x_y)
                 except:
-                    self._logger.debug('Could not get offset', exc_info=True)
+                    self.logger.debug('Could not get offset', exc_info=True)
             except:
-                self._logger.debug('Failed', exc_info=True)
+                self.logger.debug('Failed', exc_info=True)
         elif cam == COARSE_CCL:
-            self._logger.debug('Trying to get coarse CCL data')
+            self.logger.debug('Trying to get coarse CCL data')
             try:
                 if not self.sys.coarse_camera.is_running: self.sys.coarse_camera.start()
                 img = self.sys.coarse_camera.get_latest_image()
@@ -753,7 +814,7 @@ class LiveViewFrame(ttk.Frame):
                 try:
                     offset_pos = np.array(goal_pos) + np.array(self.sys.coarse_track_thread.goal_offset_x_y)
                 except:
-                    self._logger.debug('Could not get offset', exc_info=True)
+                    self.logger.debug('Could not get offset', exc_info=True)
                 plate_scale = self.sys.coarse_camera.plate_scale
                 rotation = self.sys.coarse_camera.rotation
                 mean_pos = self.sys.coarse_track_thread.mean_x_y_absolute
@@ -761,10 +822,11 @@ class LiveViewFrame(ttk.Frame):
                 track_pos = self.sys.coarse_track_thread.track_x_y_absolute
                 search_pos = self.sys.coarse_track_thread.pos_search_x_y
                 search_rad = self.sys.coarse_track_thread.pos_search_rad
+                exposure = self.sys.coarse_camera.exposure_time
             except:
-                self._logger.debug('Failed', exc_info=True)
+                self.logger.debug('Failed', exc_info=True)
         elif cam == FINE_FCL:
-            self._logger.debug('Trying to get fine FCL data')
+            self.logger.debug('Trying to get fine FCL data')
             try:
                 if not self.sys.fine_camera.is_running: self.sys.fine_camera.start()
                 img = self.sys.fine_camera.get_latest_image()
@@ -772,7 +834,7 @@ class LiveViewFrame(ttk.Frame):
                 try:
                     offset_pos = np.array(goal_pos) + np.array(self.sys.fine_track_thread.goal_offset_x_y)
                 except:
-                    self._logger.debug('Could not get offset', exc_info=True)
+                    self.logger.debug('Could not get offset', exc_info=True)
                 plate_scale = self.sys.fine_camera.plate_scale
                 rotation = self.sys.fine_camera.rotation
                 mean_pos = self.sys.fine_track_thread.mean_x_y_absolute
@@ -780,8 +842,9 @@ class LiveViewFrame(ttk.Frame):
                 track_pos = self.sys.fine_track_thread.track_x_y_absolute
                 search_pos = self.sys.fine_track_thread.pos_search_x_y
                 search_rad = self.sys.fine_track_thread.pos_search_rad
+                exposure = self.sys.fine_camera.exposure_time
             except:
-                self._logger.debug('Failed', exc_info=True)
+                self.logger.debug('Failed', exc_info=True)
 
         if img is not None:
             zoom = self.zoom_variable.get()
@@ -793,21 +856,21 @@ class LiveViewFrame(ttk.Frame):
             try:
                 img = img[offs_y:offs_y+height, offs_x:offs_x+width]
             except:
-                self._logger.warning('Failed to zoom image')
+                self.logger.warning('Failed to zoom image')
 
-        self._logger.debug('Setting image to: ' + str(img))
+        self.logger.debug('Setting image to: ' + str(img))
         if img is not None:
             if self.auto_max_variable.get(): #Auto set max scaling
                 maxval = int(np.max(img))
                 self.max_entry.delete(0, 'end')
                 self.max_entry.insert(0, str(maxval))
-                self._logger.debug('Using auto max scaling with maxval {}'.format(maxval))
+                self.logger.debug('Using auto max scaling with maxval {}'.format(maxval))
             else:
                 try:
                     maxval = int(self.max_entry.get())
-                    self._logger.debug('Using manual maxval {}'.format(maxval))
+                    self.logger.debug('Using manual maxval {}'.format(maxval))
                 except:
-                    self._logger.debug('Failed to convert max entry value {} to int'\
+                    self.logger.debug('Failed to convert max entry value {} to int'\
                                        .format(self.max_entry.get()))
                     maxval = 255
             # Scale and convert to 8-bit
@@ -817,25 +880,25 @@ class LiveViewFrame(ttk.Frame):
             (in_width, in_height) = pil_img.size
             self.image_scale = min(self.canvas_size[0]/in_width, self.canvas_size[1]/in_height)
             self.image_size = (round(self.image_scale*in_width), round(self.image_scale*in_height))
-            self._logger.debug('Resizing image to: ' + str(self.image_size))
+            self.logger.debug('Resizing image to: ' + str(self.image_size))
             pil_img = pil_img.resize(self.image_size, resample=Image.NEAREST)
             # Set canvas image (must keep reference to image, otherwise will be garbage collected)
             self.tk_image = ImageTk.PhotoImage(image=pil_img)
             if self.canvas_image is None:
-                self._logger.debug('Creating image on canvas')
+                self.logger.debug('Creating image on canvas')
                 self.canvas_image = self.canvas.create_image(0, 0, image=self.tk_image, anchor=tk.NW)
             else:
                 self.canvas.itemconfig(self.canvas_image, image=self.tk_image)
-                self._logger.debug('Image was updated')
+                self.logger.debug('Image was updated')
 
             if self.annotate_variable.get() and not None in (goal_pos[0], goal_pos[1], plate_scale):
-                self._logger.debug('Annotating Goal: ' + str(goal_pos) + ' scale: ' + str(plate_scale))
+                self.logger.debug('Annotating Goal: ' + str(goal_pos) + ' scale: ' + str(plate_scale))
                 gap = 5
                 length = 30
                 width = 4
                 xhair_x = goal_pos[0] / plate_scale * self.image_scale + self.image_size[0] / 2
                 xhair_y = -goal_pos[1] / plate_scale * self.image_scale + self.image_size[1] / 2
-                self._logger.debug('Crosshair goes at: ' + str((xhair_x, xhair_y)))
+                self.logger.debug('Crosshair goes at: ' + str((xhair_x, xhair_y)))
                 xhair = np.array([[0, -gap],[0, -gap-length-2],
                                   [0, gap], [0, gap+length],
                                   [gap, 0], [gap+length+2, 0],
@@ -862,17 +925,17 @@ class LiveViewFrame(ttk.Frame):
                     self.canvas.coords(self.goal_handles[3], *xhair[:,6], *xhair[:,7])
                     self.canvas.tag_raise('goal')
             else:
-                self._logger.debug('Hiding goal')
+                self.logger.debug('Hiding goal')
                 self.canvas.tag_lower('goal')
 
             if self.annotate_variable.get() and not None in (offset_pos[0], offset_pos[1], plate_scale):
-                self._logger.debug('Annotating Offset: ' + str(offset_pos) + ' scale: ' + str(plate_scale))
+                self.logger.debug('Annotating Offset: ' + str(offset_pos) + ' scale: ' + str(plate_scale))
                 gap = 5
                 length = 10
                 width = 4
                 xhair_x = offset_pos[0] / plate_scale * self.image_scale + self.image_size[0] / 2
                 xhair_y = -offset_pos[1] / plate_scale * self.image_scale + self.image_size[1] / 2
-                self._logger.debug('Crosshair goes at: ' + str((xhair_x, xhair_y)))
+                self.logger.debug('Crosshair goes at: ' + str((xhair_x, xhair_y)))
                 xhair = np.array([[0, -gap],[0, -gap-length],
                                   [0, gap], [0, gap+length],
                                   [gap, 0], [gap+length, 0],
@@ -896,16 +959,16 @@ class LiveViewFrame(ttk.Frame):
                     self.canvas.coords(self.offset_handles[3], *xhair[:,6], *xhair[:,7])
                     self.canvas.tag_raise('offset')
             else:
-                self._logger.debug('Hiding offset')
+                self.logger.debug('Hiding offset')
                 self.canvas.tag_lower('offset')
 
             if self.annotate_variable.get() and not None in (mean_pos[0], mean_pos[1], track_sd, plate_scale):
-                self._logger.debug('Annotating Mean: ' + str(mean_pos) + ' scale: ' + str(track_sd))
+                self.logger.debug('Annotating Mean: ' + str(mean_pos) + ' scale: ' + str(track_sd))
                 canvas_x = mean_pos[0] / plate_scale * self.image_scale + self.image_size[0] / 2 - .5
                 canvas_y = -mean_pos[1] / plate_scale * self.image_scale + self.image_size[1] / 2 + .5
                 canvas_sd = track_sd / plate_scale * self.image_scale
                 coords = (canvas_x-canvas_sd, canvas_y-canvas_sd, canvas_x+canvas_sd, canvas_y+canvas_sd)
-                self._logger.debug('Circle goes at: ' + str((canvas_x, canvas_y)) + ' radius: ' + str(canvas_sd))
+                self.logger.debug('Circle goes at: ' + str((canvas_x, canvas_y)) + ' radius: ' + str(canvas_sd))
                 colour = 'green'
                 if self.track_circle_handle is None:
                     self.track_circle_handle = self.canvas.create_oval(*coords, outline=colour, width=2, tag='mean')
@@ -913,16 +976,16 @@ class LiveViewFrame(ttk.Frame):
                     self.canvas.coords(self.track_circle_handle, *coords)
                     self.canvas.tag_raise('mean')
             else:
-                self._logger.debug('Hiding mean')
+                self.logger.debug('Hiding mean')
                 self.canvas.tag_lower('mean')
 
             if self.annotate_variable.get() and not None in (search_pos[0], search_pos[1], search_rad, plate_scale):
-                self._logger.debug('Annotating Search: ' + str(search_pos) + ' radius: ' + str(search_rad))
+                self.logger.debug('Annotating Search: ' + str(search_pos) + ' radius: ' + str(search_rad))
                 canvas_x = search_pos[0] / plate_scale * self.image_scale + self.image_size[0] / 2 - .5
                 canvas_y = -search_pos[1] / plate_scale * self.image_scale + self.image_size[1] / 2 + .5
                 canvas_rad = search_rad / plate_scale * self.image_scale
                 coords = (canvas_x-canvas_rad, canvas_y-canvas_rad, canvas_x+canvas_rad, canvas_y+canvas_rad)
-                self._logger.debug('Circle goes at: ' + str((canvas_x, canvas_y)) + ' radius: ' + str(canvas_rad))
+                self.logger.debug('Circle goes at: ' + str((canvas_x, canvas_y)) + ' radius: ' + str(canvas_rad))
                 colour = 'blue'
                 if self.search_circle_handle is None:
                     self.search_circle_handle = self.canvas.create_oval(*coords, outline=colour, width=2, tag='search')
@@ -930,11 +993,11 @@ class LiveViewFrame(ttk.Frame):
                     self.canvas.coords(self.search_circle_handle, *coords)
                     self.canvas.tag_raise('search')
             else:
-                self._logger.debug('Hiding mean')
+                self.logger.debug('Hiding mean')
                 self.canvas.tag_lower('search')
 
             if self.annotate_variable.get() and not None in (track_pos[0], track_pos[1], plate_scale):
-                self._logger.debug('Annotating Search: ' + str(track_pos) + ' radius: ' + str(search_rad))
+                self.logger.debug('Annotating Search: ' + str(track_pos) + ' radius: ' + str(search_rad))
                 canvas_x = track_pos[0] / plate_scale * self.image_scale + self.image_size[0] / 2 - .5
                 canvas_y = -track_pos[1] / plate_scale * self.image_scale + self.image_size[1] / 2 + .5
                 length = 6
@@ -942,7 +1005,7 @@ class LiveViewFrame(ttk.Frame):
                 colour = 'green'
                 coords_h = (canvas_x-length, canvas_y, canvas_x+length, canvas_y)
                 coords_v = (canvas_x, canvas_y-length, canvas_x, canvas_y+length)
-                self._logger.debug('Cross goes at: ' + str((canvas_x, canvas_y)))
+                self.logger.debug('Cross goes at: ' + str((canvas_x, canvas_y)))
                 if None in self.track_cross_handles:
                     self.track_cross_handles[0] = self.canvas.create_line(coords_h, fill=colour, width=width,\
                                                                           tag='track')
@@ -953,55 +1016,61 @@ class LiveViewFrame(ttk.Frame):
                     self.canvas.coords(self.track_cross_handles[1], coords_v)
                     self.canvas.tag_raise('track')
             else:
-                self._logger.debug('Hiding mean')
+                self.logger.debug('Hiding mean')
                 self.canvas.tag_lower('track')
         else:
-            self._logger.debug('Did not get an image to show')
+            self.logger.debug('Did not get an image to show')
             self.tk_image = ImageTk.PhotoImage(image=Image.new(mode='L', size=self.canvas_size))
             self.image_size = self.canvas_size
             if self.canvas_image is None:
-                self._logger.debug('Creating image on canvas')
+                self.logger.debug('Creating image on canvas')
                 self.canvas_image = self.canvas.create_image(0, 0, image=self.tk_image, anchor=tk.NW)
             else:
                 self.canvas.itemconfig(self.canvas_image, image=self.tk_image)
-                self._logger.debug('Image was updated')
+                self.logger.debug('Image was updated')
             self.canvas.tag_lower('goal')
             self.canvas.tag_lower('offset')
             self.canvas.tag_lower('mean')
             self.canvas.tag_lower('search')
             self.canvas.tag_lower('track')
 
+        # Update exposure box, unless it is in focus
+        if not self.exposure_entry.instate(('focus',)):
+            self.logger.debug('Setting exposure time box to ' + str(exposure))
+            self.exposure_entry.delete(0, 'end')
+            if exposure: self.exposure_entry.insert(0, exposure)
+
         if not self._update_stop:
-            self._logger.debug('Calling update on self after {} ms'.format(self._update_after))
+            self.logger.debug('Calling update on self after {} ms'.format(self._update_after))
             self.after(self._update_after, self.update)
 
     def start(self, after=None):
         """Give number of milliseconds to wait between updates."""
-        self._logger.debug('LiveViewFrame got start request with after={}'.format(after))
+        self.logger.debug('LiveViewFrame got start request with after={}'.format(after))
         if after is not None: self._update_after = after
         self._update_stop = False
         self.update()
 
     def stop(self):
         """Stop updating."""
-        self._logger.debug('LiveViewFrame got stop request')
+        self.logger.debug('LiveViewFrame got stop request')
         self._update_stop = True
 
 
 class HardwareFrame(ttk.Frame):
     """Extends tkinter.Frame for controlling System hardware"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating HardwareFrame')
+        self.logger = logger
+        self.logger.debug('Creating HardwareFrame')
         super().__init__(master)
         self.sys = pypogs_system
-        self._logger.debug('Configure button styles')
+        self.logger.debug('Configure button styles')
         ttk.Style().configure('mount.TButton')
         ttk.Style().configure('star.TButton')
         ttk.Style().configure('coarse.TButton')
         ttk.Style().configure('fine.TButton')
         ttk.Style().configure('rec.TButton')
-        self._logger.debug('Create label and hardware buttons')
+        self.logger.debug('Create label and hardware buttons')
         ttk.Label(self, text='Hardware Setup and Properties').grid(row=0, column=0, columnspan=6, sticky=tk.W+tk.E)
         tk.Frame(self, height=1, bg='gray50').grid(row=1, column=0, columnspan=6, sticky=tk.W+tk.E)
         self.mount_button = ttk.Button(self, text='Mount\n(Not set)', style='mount.TButton', \
@@ -1019,7 +1088,7 @@ class HardwareFrame(ttk.Frame):
         self.receiver_button = ttk.Button(self, text='Receiver\n(Not set)', style='rec.TButton', \
                                           command=self.receiver_callback, width=12)
         self.receiver_button.grid(row=2, column=4)
-        self._logger.debug('Create init/deinit frame and buttons')
+        self.logger.debug('Create init/deinit frame and buttons')
         self.init_frame = ttk.Frame(self)
         self.init_frame.grid(row=3, column=0, columnspan=5, sticky=tk.W+tk.E)
         ttk.Button(self.init_frame, text='Initialize All', command=self.init_callback, width=12) \
@@ -1032,12 +1101,12 @@ class HardwareFrame(ttk.Frame):
         self.fine_popup = None
         self.receiver_popup = None
 
-        self._logger.debug('Finished creating. Call update on self')
+        self.logger.debug('Finished creating. Call update on self')
         self.update() # Set the state
 
     def update(self):
         """Update the status of all buttons."""
-        self._logger.debug('HardwareFrame got update request')
+        self.logger.debug('HardwareFrame got update request')
         # Mount
         if self.sys.mount is None:
             ttk.Style().configure('mount.TButton',\
@@ -1098,10 +1167,10 @@ class HardwareFrame(ttk.Frame):
         else:
             ttk.Style().configure('rec.TButton', background='red', foreground='red')
             self.receiver_button['text'] = 'Receiver\n(Not init)'
-        self._logger.debug('Updated all button statuses.')
+        self.logger.debug('Updated all button statuses.')
 
     def mount_callback(self):
-        self._logger.debug('HardwareFrame mount button clicked')
+        self.logger.debug('HardwareFrame mount button clicked')
         try:
             if self.mount_popup is None:
                 self.mount_popup = self.HardwarePopup(self, 'mount', self.sys.mount, self.sys.add_mount, self.sys.clear_mount, \
@@ -1110,11 +1179,11 @@ class HardwareFrame(ttk.Frame):
                 self.mount_popup.update()
                 self.mount_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open mount popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open mount popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def star_callback(self):
-        self._logger.debug('HardwareFrame star button clicked')
+        self.logger.debug('HardwareFrame star button clicked')
         try:
             if self.star_popup is None:
                 self.star_popup = self.HardwarePopup(self, 'camera', self.sys.star_camera, self.sys.add_star_camera, \
@@ -1125,11 +1194,11 @@ class HardwareFrame(ttk.Frame):
                 self.star_popup.update()
                 self.star_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open star popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open star popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def coarse_callback(self):
-        self._logger.debug('HardwareFrame coarse button clicked')
+        self.logger.debug('HardwareFrame coarse button clicked')
         try:
             if self.coarse_popup is None:
                 self.coarse_popup = self.HardwarePopup(self, 'camera', self.sys.coarse_camera, self.sys.add_coarse_camera, \
@@ -1140,11 +1209,11 @@ class HardwareFrame(ttk.Frame):
                 self.coarse_popup.update()
                 self.coarse_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open coarse popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open coarse popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def fine_callback(self):
-        self._logger.debug('HardwareFrame fine button clicked')
+        self.logger.debug('HardwareFrame fine button clicked')
         try:
             if self.fine_popup is None:
                 self.fine_popup = self.HardwarePopup(self, 'camera', self.sys.fine_camera, self.sys.add_fine_camera, \
@@ -1154,11 +1223,11 @@ class HardwareFrame(ttk.Frame):
                 self.fine_popup.update()
                 self.fine_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open fine popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open fine popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def receiver_callback(self):
-        self._logger.debug('HardwareFrame receiver button clicked')
+        self.logger.debug('HardwareFrame receiver button clicked')
         try:
             if self.receiver_popup is None:
                 self.receiver_popup = self.HardwarePopup(self, 'receiver', self.sys.receiver, self.sys.add_receiver, \
@@ -1168,25 +1237,25 @@ class HardwareFrame(ttk.Frame):
                 self.receiver_popup.update()
                 self.receiver_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open receiver popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open receiver popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def init_callback(self):
-        self._logger.debug('HardwareFrame init button clicked')
+        self.logger.debug('HardwareFrame init button clicked')
         try:
             self.sys.initialize()
-            self._logger.debug('System was initialised')
+            self.logger.debug('System was initialised')
         except Exception as err:
-            ErrorPopup(self, err, self._logger)
+            ErrorPopup(self, err, self.logger)
         self.update()
 
     def deinit_callback(self):
-        self._logger.debug('HardwareFrame deinit button clicked')
+        self.logger.debug('HardwareFrame deinit button clicked')
         try:
             self.sys.deinitialize()
-            self._logger.debug('System was deinitialised')
+            self.logger.debug('System was deinitialised')
         except Exception as err:
-            ErrorPopup(self, err, self._logger)
+            ErrorPopup(self, err, self.logger)
         self.update()
 
     class HardwarePopup(tk.Toplevel):
@@ -1197,7 +1266,7 @@ class HardwareFrame(ttk.Frame):
         def __init__(self, master, device_type, device, add_func, clear_func, link_device=0, link_func=0, properties_frame=None, \
                      title='Hardware', default_name=''):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master._logger
+            self.logger = master.logger
             self.title(title)
             self.resizable(False, False)
             self.device = device
@@ -1212,7 +1281,10 @@ class HardwareFrame(ttk.Frame):
             self.linked_bool = tk.BooleanVar()
             r = 0
             if link_device != 0:
-                ttk.Checkbutton(setup_frame, text='Link Star and Coarse', variable=self.linked_bool).grid(row=r, column=0); r+=1
+                ttk.Checkbutton(setup_frame, text='Link Star and Coarse', variable=self.linked_bool) \
+                                                                .grid(row=r, column=0)
+                r+=1
+
             ttk.Label(setup_frame, text='Model:').grid(row=r, column=0); r+=1
             self.model_combo = ttk.Combobox(setup_frame, values=master.sys._supported_models[device_type])
             self.model_combo.grid(row=r, column=0); r+=1
@@ -1237,8 +1309,10 @@ class HardwareFrame(ttk.Frame):
             self.update()
 
         def update(self):
-            self._logger.debug('HardwarePopup got update request')
+            self.logger.debug('HardwarePopup got update request')
+            #self.model_entry.delete(0, 'end')
             #self.identity_entry.delete(0, 'end')
+            #self.name_entry.delete(0, 'end')
             if self.device is None:
                 #model = ''
                 #identity = ''
@@ -1249,23 +1323,21 @@ class HardwareFrame(ttk.Frame):
                 identity = self.device.identity
                 if identity is None: identity = ''
                 name = self.device.name
-                self.update_properties()
-                self.identity_entry.delete(0, tk.END)
+                #self.update_properties()
                 self.identity_entry.insert(0, identity)
-            self.name_entry.delete(0, tk.END)
             self.name_entry.insert(0, name)
             self.linked_bool.set(self.device is not None and self.device is self.link_device)
             self.master.update()   
             self.update_properties()
 
         def clear_callback(self):
-            self._logger.debug('HardwarePopup clear button clicked')
+            self.logger.debug('HardwarePopup clear button clicked')
             self.clear_func()
             self.device = None
             self.update()
 
         def connect_callback(self):
-            self._logger.debug('HardwarePopup connect button clicked')
+            self.logger.debug('HardwarePopup connect button clicked')
             # Read the entries
             model = self.model_combo.get()
             if not model.strip(): model = None
@@ -1273,17 +1345,17 @@ class HardwareFrame(ttk.Frame):
             if not identity.strip(): identity = None
             name = self.name_entry.get()
             if not name.strip(): name = None
-            self._logger.debug(str(model)+str(identity)+str(name))
+            self.logger.debug(str(model)+str(identity)+str(name))
             try:
                 self.device = self.add_func(model=model, identity=identity, name=name)
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
             if self.linked_bool.get():
-                self._logger.debug('Will also set the other device!')
+                self.logger.debug('Will also set the other device!')
                 try:
                     self.link_device = self.link_func()
                 except Exception as err:
-                    ErrorPopup(self, err, self._logger)
+                    ErrorPopup(self, err, self.logger)
             self.update()
 
         def update_properties(self):
@@ -1291,7 +1363,7 @@ class HardwareFrame(ttk.Frame):
                 property_list = self.device.available_properties
             except (AssertionError, AttributeError):
                 property_list = None
-                self._logger.debug('Got no properties to list', exc_info=True)
+                self.logger.debug('Got no properties to list', exc_info=True)
             i = 0
             if property_list is not None:
                 row = 1
@@ -1316,7 +1388,7 @@ class HardwareFrame(ttk.Frame):
                         entry.insert(0, value)
                         label['text'] = name
                     except AttributeError as err:
-                        ErrorPopup(self, err, self._logger)
+                        ErrorPopup(self, err, self.logger)
                     try:
                         self.property_entries[i] = (name, entry, value, label)
                     except IndexError:
@@ -1336,25 +1408,25 @@ class HardwareFrame(ttk.Frame):
                 i += 1
 
         def set_properties(self):
-            self._logger.debug('Got set properties. Here are the entries:')
+            self.logger.debug('Got set properties. Here are the entries:')
             for name, entry, old_value, label in self.property_entries:
                 new_value = entry.get()
                 if not new_value == old_value:
                     try:
                         setattr(self.device, name, parse_expression(new_value))
-                        self._logger.debug('Set ' + str(name) + ' to: ' + str(parse_expression(new_value)))
+                        self.logger.debug('Set ' + str(name) + ' to: ' + str(parse_expression(new_value)))
                     except Exception as err:
-                        ErrorPopup(self, err, self._logger)
+                        ErrorPopup(self, err, self.logger)
                 else:
-                    self._logger.debug('Did not change: ' + str(name))
+                    self.logger.debug('Did not change: ' + str(name))
             self.update()
 
 
 class TargetFrame(ttk.Frame):
     """Extends tkinter.Frame for controlling System.target"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating TargetFrame')
+        self.logger = logger
+        self.logger.debug('Creating TargetFrame')
         super().__init__(master)
         self.sys = pypogs_system
         self._update_after = 1000
@@ -1371,7 +1443,7 @@ class TargetFrame(ttk.Frame):
         self.manual_popup = None
 
     def update(self):
-        self._logger.debug('TargetFrame got update request')
+        self.logger.debug('TargetFrame got update request')
         """Update the target status"""
         target_string = self.sys.target.get_short_string()
         t_start = self.sys.target.start_time
@@ -1400,7 +1472,7 @@ class TargetFrame(ttk.Frame):
         self._update_stop = True
 
     def manual_button_callback(self):
-        self._logger.debug('TargetFrame manual button clicked')
+        self.logger.debug('TargetFrame manual button clicked')
         try:
             if self.manual_popup is None:
                 self.manual_popup = self.ManualPopup(self)
@@ -1408,33 +1480,33 @@ class TargetFrame(ttk.Frame):
                 self.manual_popup.update()
                 self.manual_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open manual popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open manual popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     def target_from_file_button_callback(self):
         try:
             raise NotImplementedError('Feature coming soon!')
         except Exception as err:
-            ErrorPopup(self, err, self._logger)
+            ErrorPopup(self, err, self.logger)
             
     def go_to_target_callback(self):
-        self._logger.debug('MountControlFrame Go to target clicked')
+        self.logger.debug('MountControlFrame Go to target clicked')
         assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
         try:
             itrf_xyz = self.sys.get_itrf_direction_of_target()
             enu_altaz = self.sys.alignment.get_enu_altaz_from_itrf_xyz(itrf_xyz)
             altaz_string = 'Alt:' + str(round(enu_altaz[0],3)) + DEG + ' Az:' + str(round(enu_altaz[1],3)) + DEG
-            self._logger.debug('Target coordinates: '+altaz_string)
-            self._logger.debug('Send in EastNorthUp')
+            self.logger.debug('Target coordinates: '+altaz_string)
+            self.logger.debug('Send in EastNorthUp')
             self.sys.mount.move_to_alt_az(*enu_altaz, block=False)
         except Exception as err:
-            ErrorPopup(self.master, err, self._logger)
+            ErrorPopup(self.master, err, self.logger)
 
     class ManualPopup(tk.Toplevel):
         """Extends tk.Toplevel for setting target manually."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master._logger
+            self.logger = master.logger
             self.title('Target')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
@@ -1503,7 +1575,7 @@ class TargetFrame(ttk.Frame):
             self.update()
 
         def update(self):
-            self._logger.debug('ManualPopup got update request')
+            self.logger.debug('ManualPopup got update request')
             """Read the target status and fill in fields."""
             target = self.master.sys.target.target_object
             # Clear everything
@@ -1522,7 +1594,7 @@ class TargetFrame(ttk.Frame):
                 self.tle_line1_entry.insert(0, l1)
                 self.tle_line2_entry.insert(0, l2)
             else:
-                self._logger.debug('No target set, leaving clear.')
+                self.logger.debug('No target set, leaving clear.')
             # Clear times
             self.start_entry.delete(0, 'end')
             self.end_entry.delete(0, 'end')
@@ -1534,11 +1606,11 @@ class TargetFrame(ttk.Frame):
             self.master.update()
 
         def get_tle_callback(self):
-            self._logger.debug("TLE requested for sat ID: " + self.sat_norad_id_entry.get())        
+            self.logger.debug("TLE requested for sat ID: " + self.sat_norad_id_entry.get())        
             try:
                 self.sat_id = int(self.sat_norad_id_entry.get())
             except:
-                self._logger.debug("sat ID invalid")
+                self.logger.debug("sat ID invalid")
                 self.sat_name_label['text'] = ''
                 self.sat_id = None
             if self.sat_id:
@@ -1548,12 +1620,12 @@ class TargetFrame(ttk.Frame):
                     self.tle_line2_entry.insert(0,tle[1])
                     sat_name = tle[2]
                     self.sat_name_label['text'] = sat_name or ''
-                    self._logger.debug('successfully fetched TLE for sat ID '+str(self.sat_id)+', "'+sat_name+'"')
-                    self._logger.debug(tle[0])
-                    self._logger.debug(tle[1])
-                    self._logger.debug(tle[2])
+                    self.logger.debug('successfully fetched TLE for sat ID '+str(self.sat_id)+', "'+sat_name+'"')
+                    self.logger.debug(tle[0])
+                    self.logger.debug(tle[1])
+                    self.logger.debug(tle[2])
                 else:
-                    self._logger.info('Failed to retrieve TLE for sat ID ' +str(self.sat_id))
+                    self.logger.info('Failed to retrieve TLE for sat ID ' +str(self.sat_id))
                     self.sat_name_label['text'] = '(failed)'                    
 
         def get_and_set_tle_callback(self):
@@ -1570,7 +1642,7 @@ class TargetFrame(ttk.Frame):
                 #self.update() called in clear_time_callback()
                 self.master.sys.target.set_source('TLE')
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
                 
         def set_radec_callback(self):
             try:
@@ -1581,22 +1653,22 @@ class TargetFrame(ttk.Frame):
                 #self.update() called in clear_time_callback()
                 self.master.sys.target.set_source('RADEC')
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
                 
         def set_time_callback(self):
             try:
                 start = self.start_entry.get()
-                self._logger.debug(start)
+                self.logger.debug(start)
                 start = None if not start.strip() else apy_time(start)
-                self._logger.debug(start)
+                self.logger.debug(start)
                 end = self.end_entry.get()
-                self._logger.debug(end)
+                self.logger.debug(end)
                 end = None if not end.strip() else apy_time(end)
-                self._logger.debug(start)
+                self.logger.debug(start)
                 self.master.sys.target.set_start_end_time(start, end)
                 self.update()
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
                 
         def clear_time_callback(self):
             try:
@@ -1607,29 +1679,29 @@ class TargetFrame(ttk.Frame):
                 self.master.sys.target.clear_start_end_time()
                 self.update()
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
 
         def get_ephem_callback(self):
             try:
-                self._logger.debug("Ephemeris requested for NAIF object ID: " + self.naif_obj_id_entry.get())
+                self.logger.debug("Ephemeris requested for NAIF object ID: " + self.naif_obj_id_entry.get())
                 obj_id = self.naif_obj_id_entry.get()
                 (lat, lon, elevation_m) = self.master.sys.alignment.get_location_lat_lon_height()
                 assert lat and lon and elevation_m, 'Alignment not initialized'
-                self._logger.info("Ephemeris requested for sat ID: " + obj_id)
+                self.logger.info("Ephemeris requested for sat ID: " + obj_id)
                 self.master.sys.target.get_ephem(obj_id, lat, lon, elevation_m)
                 if self.master.sys.target._ephem.target_name is not None:
-                    self._logger.info('Ephemeris target object: "%s"' % self.master.sys.target._ephem.target_name)
+                    self.logger.info('Ephemeris target object: "%s"' % self.master.sys.target._ephem.target_name)
                 self.ephem_obj_name_label['text'] = self.master.sys.target._ephem.target_name or ''
                 self.master.sys.target.set_source('EPHEM')
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
                 self.ephem_obj_name_label['text'] = ''
 
 class AlignmentFrame(ttk.Frame):
     """Extends tkinter.Frame for controlling System.alignment"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating AlignmentFrame')
+        self.logger = logger
+        self.logger.debug('Creating AlignmentFrame')
         super().__init__(master)
         self.sys = pypogs_system
         self._update_after = 1000
@@ -1648,7 +1720,7 @@ class AlignmentFrame(ttk.Frame):
 
     def update(self):
         """Update the alignment status"""
-        self._logger.debug('AlignmentFrame got update request')
+        self.logger.debug('AlignmentFrame got update request')
         try:
             (lat, lon, height) = self.sys.alignment.get_location_lat_lon_height()
             loc_string = 'N:' + str(round(lat, 3)) + DEG + ' E:' + str(round(lon, 3)) + DEG
@@ -1676,7 +1748,7 @@ class AlignmentFrame(ttk.Frame):
 
 
     def location_button_callback(self):
-        self._logger.debug('AlignmentFrame location button clicked')
+        self.logger.debug('AlignmentFrame location button clicked')
         try:
             if self.location_popup is None:
                 self.location_popup = self.LocationPopup(self)
@@ -1684,14 +1756,14 @@ class AlignmentFrame(ttk.Frame):
                 self.location_popup.update()
                 self.location_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open location popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open location popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     class LocationPopup(tk.Toplevel):
         """Extends tk.Toplevel for setting location."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master._logger
+            self.logger = master.logger
             self.title('Location')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
@@ -1725,10 +1797,10 @@ class AlignmentFrame(ttk.Frame):
 #                self.master.update()
 #                self.withdraw()
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
 
     def alignment_button_callback(self):
-        self._logger.debug('AlignmentFrame alignment button clicked')
+        self.logger.debug('AlignmentFrame alignment button clicked')
         try:
             if self.alignment_popup is None:
                 self.alignment_popup = self.AlignmentPopup(self)
@@ -1736,14 +1808,14 @@ class AlignmentFrame(ttk.Frame):
                 self.alignment_popup.update()
                 self.alignment_popup.deiconify()
         except Exception as err:
-            self._logger.debug('Could not open alignment popup', exc_info=True)
-            ErrorPopup(self, err, self._logger)
+            self.logger.debug('Could not open alignment popup', exc_info=True)
+            ErrorPopup(self, err, self.logger)
 
     class AlignmentPopup(tk.Toplevel):
         """Extends tk.Toplevel for setting alignment."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
-            self._logger = master._logger
+            self.logger = master.logger
             self.title('Alignment')
             self.resizable(False, False)
 #            self.grab_set() #Grab control
@@ -1759,14 +1831,14 @@ class AlignmentFrame(ttk.Frame):
 #                self.master.update()
 #                self.withdraw()
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
         def enu_callback(self):
             try:
                 self.master.sys.alignment.set_alignment_enu()
 #                self.master.update()
 #                self.withdraw()
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
         def load_callback(self):
             try:
                 filename = filedialog.askopenfilename(
@@ -1776,14 +1848,14 @@ class AlignmentFrame(ttk.Frame):
                 )
                 self.master.sys.alignment.get_alignment_data_form_file(filename)
             except Exception as err:
-                ErrorPopup(self, err, self._logger)
+                ErrorPopup(self, err, self.logger)
 
 
 class StatusFrame(ttk.Frame):
     """Extends tkinter.Frame for displaying Mount status"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating StatusFrame')
+        self.logger = logger
+        self.logger.debug('Creating StatusFrame')
         super().__init__(master)
         self.sys = pypogs_system
         self._update_stop = True
@@ -1796,7 +1868,7 @@ class StatusFrame(ttk.Frame):
         self.update() # Sets status
 
     def update(self):
-        self._logger.debug('StatusFrame got update request')
+        self.logger.debug('StatusFrame got update request')
         """Update status once. Auto update with start() and stop() instead."""
         keys = ('alt', 'azi', 'alt_rate', 'azi_rate')
         mount_state = self.sys.mount.state_cache if self.sys.mount is not None else None
@@ -1849,8 +1921,8 @@ class StatusFrame(ttk.Frame):
 class MountControlFrame(ttk.Frame):
     """Extends tkinter.Frame for manual control of Mount"""
     def __init__(self, master, pypogs_system, logger):
-        self._logger = logger
-        self._logger.debug('Creating ManualControlFrame')
+        self.logger = logger
+        self.logger.debug('Creating ManualControlFrame')
         super().__init__(master)
         self.sys = pypogs_system
         self._update_stop = True
@@ -1887,7 +1959,7 @@ class MountControlFrame(ttk.Frame):
         self.update()
         
     def update(self):
-        self._logger.debug('MountControlFrame got update request')
+        self.logger.debug('MountControlFrame got update request')
         
         if self.sys.mount is not None and self.sys.mount.is_init:
             if self.sys.mount._is_sidereal_tracking:
@@ -1914,26 +1986,26 @@ class MountControlFrame(ttk.Frame):
         self._update_stop = True
         
     def stop_button_callback(self):
-        self._logger.debug('MountControlFrame stop clicked')
+        self.logger.debug('MountControlFrame stop clicked')
         assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
         self.sys.stop()
 
     def send_button_callback(self):
-        self._logger.debug('MountControlFrame send clicked')
+        self.logger.debug('MountControlFrame send clicked')
         # Read inputs and check
         input_ok = True
         try:
             alt = float(self.alt_spinbox.get())
             assert 0 <= alt <= 90
         except Exception as err:
-            ErrorPopup(self, err, self._logger)
+            ErrorPopup(self, err, self.logger)
             alt = 0.0
             input_ok = False
         try:
             azi = float(self.azi_spinbox.get())
             assert -360 <= azi <= 360
         except Exception as err:
-            ErrorPopup(self, err, self._logger)
+            ErrorPopup(self, err, self.logger)
             azi = 0.0
             input_ok = False
         # Set inputs to our decoded value
@@ -1941,50 +2013,50 @@ class MountControlFrame(ttk.Frame):
         self.alt_spinbox.insert(0, str(alt))
         self.azi_spinbox.delete(0, 'end')
         self.azi_spinbox.insert(0, str(azi))
-        self._logger.debug('Values alt='+str(alt)+' azi='+str(azi))
+        self.logger.debug('Values alt='+str(alt)+' azi='+str(azi))
         try:
             if input_ok:
                 # Check mount ready
                 assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
                 mode = self.coord_variable.get()
                 if mode == COMMAND:
-                    self._logger.debug('Send direct to mount')
+                    self.logger.debug('Send direct to mount')
                     self.sys.mount.move_to_alt_az(alt, azi, block=False)
                 elif mode == MOUNT:
-                    self._logger.debug('Send in corrected mount coordinates')
+                    self.logger.debug('Send in corrected mount coordinates')
                     com_altaz = self.sys.alignment.get_com_altaz_from_mnt_altaz((alt, azi))
-                    self._logger.debug('Command: ' + str(com_altaz))
+                    self.logger.debug('Command: ' + str(com_altaz))
                     self.sys.mount.move_to_alt_az(*com_altaz, block=False)
                 elif mode == ENU:
-                    self._logger.debug('Send in EastNorthUp')
+                    self.logger.debug('Send in EastNorthUp')
                     com_altaz = self.sys.alignment.get_com_altaz_from_enu_altaz((alt, azi))
-                    self._logger.debug('Command: ' + str(com_altaz))
+                    self.logger.debug('Command: ' + str(com_altaz))
                     self.sys.mount.move_to_alt_az(*com_altaz, block=False)
                 else:
                     raise RuntimeError('Unknown coordinate choice')
             else:
                 raise ValueError('Forbidden input')
         except Exception as err:
-            ErrorPopup(self.master, err, self._logger)
+            ErrorPopup(self.master, err, self.logger)
 
     def toggle_sidereal_tracking(self):
-        self._logger.debug('Sidereal tracking button clicked')
+        self.logger.debug('Sidereal tracking button clicked')
         if self.sys.mount._is_sidereal_tracking:
-            self._logger.debug('Sidereal tracking is on.  Will turn off.')            
+            self.logger.debug('Sidereal tracking is on.  Will turn off.')            
             self.sys.mount.stop_sidereal_tracking()
         else:
-            self._logger.debug('Sidereal tracking is off.  Will turn on.')
+            self.logger.debug('Sidereal tracking is off.  Will turn on.')
             # Require mount initialized
             assert self.sys.mount is not None and self.sys.mount.is_init, 'No mount or not initialised'
             # Stop satellite tracking
             try:
-                self._logger.debug('Stopping control loops')
+                self.logger.debug('Stopping control loops')
                 self.sys.stop()
             except Exception as err:
-                self._logger.debug('Did not stop', exc_info=True)
-                ErrorPopup(self, err, self._logger)
+                self.logger.debug('Did not stop', exc_info=True)
+                ErrorPopup(self, err, self.logger)
             # Start sidereal tracking
-            self._logger.debug('Starting sidereal tracking')
+            self.logger.debug('Starting sidereal tracking')
             self.sys.mount.start_sidereal_tracking()
             
 class ErrorPopup(tk.Toplevel):
@@ -1997,7 +2069,3 @@ class ErrorPopup(tk.Toplevel):
         self.grab_set() #Grab control
         ttk.Label(self, text=str(error), width=50).pack()
         ttk.Button(self, text='Close', command=self.destroy).pack(fill=tk.BOTH)
-
-
-
-
