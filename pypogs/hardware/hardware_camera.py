@@ -1,5 +1,5 @@
 """Camera hardware interface
-======================
+============================
 
 Current hardware support:
     - :class:`pypogs.Camera`: 'ptgrey' for FLIR (formerly Point Grey) machine vision cameras. Requires Spinnaker API and PySpin, see the
@@ -26,7 +26,6 @@ License:
     See the License for the specific language governing permissions and
     limitations under the License.
 """
-
 # Standard imports:
 from pathlib import Path
 import logging
@@ -34,6 +33,8 @@ from time import sleep, time as timestamp, perf_counter as precision_timestamp
 from datetime import datetime
 from threading import Thread, Event
 from struct import pack as pack_data
+
+
 # External imports:
 import numpy as np
 import serial
@@ -51,7 +52,7 @@ class Camera:
     auto_init=False is passed). Manually initialise with a call to Camera.initialize(); release hardware with a call to
     Camera.deinitialize().
 
-    After the Camera is intialised, acquisition properties (e.g. exposure_time and frame_rate) may be set and images
+    After the Camera is initialised, acquisition properties (e.g. exposure_time and frame_rate) may be set and images
     received. The Camera also supports event-driven acquisition, see Camera.add_event_callback(), where new images are
     automatically passed on to the desired functions.
 
@@ -131,13 +132,13 @@ class Camera:
         self._ptgrey_camlist = None
         self._ptgrey_system = None
         #Only used for zwoasi
-        self._zwo_camera_index = None
+        self._zwoasi_camera_index = None
         self._zwoasi_camera = None
         self._zwoasi_is_init = False
         self._zwoasi_image_handler = None
+        self._zwoasi_property = None
         #Only used for ascom
         self._ascom_driver_handler = None
-        self._zwoasi_property = None
         self._ascom_camera = None
         self._exposure_sec = 0.1
         #Callbacks on image event
@@ -156,7 +157,7 @@ class Camera:
             self.identity = identity
         if name is not None:
             self.name = name
-        if auto_init and model is not None:
+        if auto_init and not None in (model, identity):
             self._logger.debug('Trying to auto-initialise')
             self.initialize()
         else:
@@ -185,7 +186,7 @@ class Camera:
             pass
         if self.is_init:
             try:
-                self._log_debug('Is initialized, de-initalizing')
+                self._log_debug('Is initialised, de-initing')
             except:
                 pass
             self.deinitialize()
@@ -282,7 +283,7 @@ class Camera:
     @model.setter
     def model(self, model):
         self._log_debug('Setting model to: '+str(model))
-        assert not self.is_init, 'Cannot change already intialised device model'
+        assert not self.is_init, 'Cannot change already initialised device model'
         model = str(model)
         assert model.lower() in self._supported_models,\
                                                 'Model type not recognised, allowed: '+str(self._supported_models)
@@ -356,25 +357,25 @@ class Camera:
             self._log_info('Detected '+str(zwo_num_cameras)+' ZWO cameras: '+str(zwo_camera_names))            
             
             # Derive ZWO camera index from identity:
-            self._zwo_camera_index = None            
+            self._zwoasi_camera_index = None            
             if identity is None:
                 # Disallow for now. Later, consider populating a selection dialog.
                 raise AssertionError('Identity is none')
             elif identity.isdigit():
                 self._log_info('specified camera identity as index ('+identity+')')
-                self._zwo_camera_index = int(identity)
+                self._zwoasi_camera_index = int(identity)
             elif identity.lower().startswith('zwo') or identity.lower().startswith('asi'):
                 self._log_info('specified camera identity by string ('+identity+')')
                 for detected_camera_idx, detected_camera in enumerate(zwo_camera_names):
                     if detected_camera.lower().replace('zwo ','') == identity.lower().replace('zwo ',''):
-                        self._zwo_camera_index = detected_camera_idx
+                        self._zwoasi_camera_index = detected_camera_idx
                         break
             else:
                 raise AssertionError('Unrecognized identity')
 
-            self._log_info('Selected ZWO camera: index '+str(self._zwo_camera_index)+', name "'+zwo_camera_names[self._zwo_camera_index]+'"')
-            assert self._zwo_camera_index is not None, 'Unrecognized ZWO camera identity: "'+identity+'"'
-            assert self._zwo_camera_index < zwo_num_cameras, ('Selected identity is greater than the available cameras,'
+            self._log_info('Selected ZWO camera: index '+str(self._zwoasi_camera_index)+', name "'+zwo_camera_names[self._zwoasi_camera_index]+'"')
+            assert self._zwoasi_camera_index is not None, 'Unrecognized ZWO camera identity: "'+identity+'"'
+            assert self._zwoasi_camera_index < zwo_num_cameras, ('Selected identity is greater than the available cameras,'
                                          'largest possible is one less than ' + str(num_cams))
             # TODO: test if in use. Turns out API allows you to initialise several objects
             # connected to the same hardware without complaining... Must keep own list?
@@ -462,7 +463,7 @@ class Camera:
             self._log_debug('Setting stream mode to newest only')
             self._ptgrey_camera.TLStream.StreamBufferHandlingMode.SetIntValue(
                                                                         PySpin.StreamBufferHandlingMode_NewestOnly)
-            class PtGreyEventHandler(PySpin.ImageEvent):
+            class PtGreyEventHandler(PySpin.ImageEventHandler):
                 """Barebones event handler for ptgrey, just pass along the event to the Camera class."""
                 def __init__(self, parent):
                     assert parent.model.lower() == 'ptgrey', 'Trying to attach ptgrey event handler to non ptgrey model'
@@ -495,7 +496,7 @@ class Camera:
                                            + ' Type:' + str(self.parent._image_data.dtype))
                     for func in self.parent._call_on_image:
                         try:
-                            #self.parent._log_debug('Calling back to: ' + str(func))
+                            self.parent._log_debug('Calling back to: ' + str(func))
                             func(self.parent._image_data, self.parent._image_timestamp)
                         except:
                             self.parent._log_warning('Failed image callback', exc_info=True)
@@ -516,8 +517,8 @@ class Camera:
             
         elif self.model.lower() == 'zwoasi':
             self._log_debug('Using zwoasi, try to initialise')
-            assert self._zwo_camera_index is not None, 'ZWO camera index not determined from identity'
-            self._zwoasi_camera = zwoasi.Camera(self._zwo_camera_index)
+            assert self._zwoasi_camera_index is not None, 'ZWO camera index not determined from identity'
+            self._zwoasi_camera = zwoasi.Camera(self._zwoasi_camera_index)
             
             # Set to normal mode and 16 bit mode by default
             self._zwoasi_camera.set_camera_mode(zwoasi.ASI_MODE_NORMAL)
@@ -603,6 +604,7 @@ class Camera:
                                 func(self.parent._image_data, self.parent._image_timestamp)
                             except:
                                 self.parent._log_warning('Failed image callback', exc_info=True)
+
                         self.parent._imgs_since_start += 1
                         if last_timestamp is not None:
                             new_frame_time = self.parent._image_precision_timestamp - last_timestamp
@@ -610,6 +612,7 @@ class Camera:
                                 self.parent._average_frame_time = new_frame_time
                             else:
                                 self.parent._average_frame_time = .8*self.parent._average_frame_time + .2*new_frame_time
+
                         self.parent._log_debug('Event handler finished.')
 
             self._zwoasi_image_handler = ZwoAsiImageHandler(self)
@@ -933,7 +936,7 @@ class Camera:
     def plate_scale(self, arcsec):
         self._log_debug('Set plate scale called with: '+str(arcsec))
         self._plate_scale = float(arcsec)
-        self._log_debug('Plate scale set to: '+str(self._plate_scale))
+        self._log_debug('Plate scale set to: '+str(self.plate_scale))
 
     @property
     def rotation(self):
@@ -1496,12 +1499,13 @@ class Camera:
         initial_size = self.size_readout
         if self.color_bin:
             initial_size = [2*x for x in initial_size]
-        initial_bin = self._binning
+        initial_bin = self.binning
         self._log_debug('Initial sensor readout area and binning: '+str(initial_size)+' ,'+str(initial_bin))
         
         # Calculate what the new ROI needs to be set to
         bin_scaling = binning/initial_bin
         new_size = [round(sz/bin_scaling) for sz in initial_size]  
+
         self._log_debug('New binning and new size to set: '+str(binning)+' ,'+str(new_size))
               
         if self.model.lower() == 'ptgrey':
@@ -1514,7 +1518,6 @@ class Camera:
             try:
                 node_horiz.SetValue(binning)
                 node_vert.SetValue(binning)
-                self._binning = binning
             except PySpin.SpinnakerException as e:
                 self._log_debug('Failure setting', exc_info=True)
                 if 'OutOfRangeException' in e.message:
@@ -1604,6 +1607,7 @@ class Camera:
             self._log_debug('Set color bin to: ' + str(self._color_bin))
         else:
             self._log_warning('Forbidden model string defined.')                                                                                
+            raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
 
     @property
     def size_max(self):
@@ -1834,9 +1838,11 @@ class Camera:
                     self._log_warning('The camera was already streaming...')
                 else:
                     raise RuntimeError('Failed to start camera acquisition') from e
+
         elif self.model.lower() == 'zwoasi':
             self._log_debug('Calling start on zwoasi image handler')
             self._zwoasi_image_handler.start()
+
         elif self.model.lower() == 'ascom':
             self._ascom_camera_imaging_handler.start_imaging_loop()
         else:
@@ -1846,10 +1852,10 @@ class Camera:
 
     def stop(self):
         """Stop the acquisition."""
+        self._log_debug('Got stop command')                                           
         if not self.is_running:
             self._log_info('Camera was not running, name: '+self.name)
             return
-        self._log_debug('Got stop command')
         if self.model.lower() == 'ptgrey':
             self._log_debug('Using PtGrey')
             try:
@@ -1907,7 +1913,6 @@ class Camera:
         Returns:
             numpy.ndarray: 2d array with image data.
         """
-        timeout = min(timeout, self.exposure_time*1000)
         self._log_debug('Got next image request')
         assert self.is_init, 'Camera must be initialised'
         if not self.is_running:
