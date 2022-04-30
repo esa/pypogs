@@ -1590,6 +1590,8 @@ class Camera:
             return False
         elif self.model.lower() == 'zwoasi':
             return self._zwoasi_property['IsColorCam'] and self._color_bin
+        elif self.model.lower() == 'ascom':
+            return False
         else:
             self._log_warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
@@ -1605,6 +1607,8 @@ class Camera:
             assert self._zwoasi_property['IsColorCam'], 'Must have colour camera to do colour binning'
             self._color_bin = bool(bin)
             self._log_debug('Set color bin to: ' + str(self._color_bin))
+        elif self.model.lower() == 'ascom':
+            raise RuntimeError('ascom cameras do not support color binning')
         else:
             self._log_warning('Forbidden model string defined.')                                                                                
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
