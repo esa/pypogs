@@ -255,6 +255,15 @@ class System:
         import weakref
         atexit.register(weakref.ref(self.__del__))
         self._logger.info('System instance created.')
+        # Common targets list:
+        self.saved_targets = {
+            'ISS':   25544, 
+            'CSS':   48274, 
+            'HST':   20580, 
+            'Terra': 25994,
+        }
+        
+        
 
     def __del__(self):
         """Destructor. Calls deinitialize()."""

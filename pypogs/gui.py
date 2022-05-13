@@ -1505,14 +1505,6 @@ class TargetFrame(ttk.Frame):
             ErrorPopup(self.master, err, self.logger)
 
     class TargetPopup(tk.Toplevel):
-        common_targets = {
-            'ISS':   25544, 
-            'CSS':   48274, 
-            'HST':   20580, 
-            'Terra': 25994,
-            'JWST':  50463,
-        }
-    
         """Extends tk.Toplevel for setting target manually."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
@@ -1524,8 +1516,8 @@ class TargetFrame(ttk.Frame):
             # list common targets
             target_selection_frame = ttk.Frame(self)
             target_selection_frame.grid(row=0, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
-            ttk.Label(target_selection_frame, text='Select a common target:').grid(row=0, column=0)
-            self.target_selection_combo = ttk.Combobox(target_selection_frame, values=list(self.common_targets.keys()))
+            ttk.Label(target_selection_frame, text='Select a saved target:').grid(row=0, column=0)
+            self.target_selection_combo = ttk.Combobox(target_selection_frame, values=list(self.master.sys.saved_targets.keys()))
             ttk.Button(target_selection_frame, text='Get', command=self.get_tle_for_selected_satellite).grid(row=0, column=2)
             self.target_selection_combo.grid(row=0, column=1, sticky=tk.E)
             self.target_selection_combo.set('ISS')
@@ -1656,8 +1648,8 @@ class TargetFrame(ttk.Frame):
         def get_tle_for_selected_satellite(self):
             selected_sat_name = self.target_selection_combo.get()
             self.logger.info('Selected target name: '+selected_sat_name)
-            if selected_sat_name in self.common_targets:
-                self.sat_id = self.common_targets[selected_sat_name]
+            if selected_sat_name in self.master.sys.saved_targets:
+                self.sat_id = self.master.sys.saved_targets[selected_sat_name]
             self.sat_norad_id_entry.delete(0, tk.END)
             self.sat_norad_id_entry.insert(0,str(self.sat_id))
             self.get_and_set_tle_callback()

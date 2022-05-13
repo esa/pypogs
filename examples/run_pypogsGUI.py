@@ -13,6 +13,8 @@ import pypogs
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
+# ADD TARGETS TO SAVED TARGETS LIST:
+#sys.saved_targets['YAOGAN 1'] = 29092
 
 # CONFIGURE GROUND STATION SITE:
 # class MySite:
