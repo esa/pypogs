@@ -1439,7 +1439,7 @@ class TargetFrame(ttk.Frame):
         self.status_label = ttk.Label(self, font='TkFixedFont')
         self.update()
         self.status_label.grid(row=2, column=0, columnspan=2)
-        ttk.Button(self, text='Set Manual', command=self.manual_button_callback, width=15).grid(row=3, column=0)
+        ttk.Button(self, text='Set Target', command=self.manual_button_callback, width=15).grid(row=3, column=0)
         ttk.Button(self, text='Set from File', command=self.target_from_file_button_callback, width=15).grid(row=3, column=1)
         ttk.Button(self, text='Go To Target', command=self.go_to_target_callback).grid(row=4, column=0, columnspan=2, sticky=tk.W+tk.E)
         self.manual_popup = None
@@ -1477,7 +1477,7 @@ class TargetFrame(ttk.Frame):
         self.logger.debug('TargetFrame manual button clicked')
         try:
             if self.manual_popup is None:
-                self.manual_popup = self.ManualPopup(self)
+                self.manual_popup = self.TargetPopup(self)
             else:
                 self.manual_popup.update()
                 self.manual_popup.deiconify()
@@ -1504,7 +1504,15 @@ class TargetFrame(ttk.Frame):
         except Exception as err:
             ErrorPopup(self.master, err, self.logger)
 
-    class ManualPopup(tk.Toplevel):
+    class TargetPopup(tk.Toplevel):
+        common_targets = {
+            'ISS':   25544, 
+            'CSS':   48274, 
+            'HST':   20580, 
+            'Terra': 25994,
+            'JWST':  50463,
+        }
+    
         """Extends tk.Toplevel for setting target manually."""
         def __init__(self, master):
             super().__init__(master, padx=10, pady=10, bg=ttk.Style().lookup('TFrame', 'background'))
@@ -1513,21 +1521,29 @@ class TargetFrame(ttk.Frame):
             self.resizable(False, False)
 #            self.grab_set() #Grab control
 
+            # list common targets
+            target_selection_frame = ttk.Frame(self)
+            target_selection_frame.grid(row=0, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
+            ttk.Label(target_selection_frame, text='Select a common target:').grid(row=0, column=0)
+            self.target_selection_combo = ttk.Combobox(target_selection_frame, values=list(self.common_targets.keys()))
+            ttk.Button(target_selection_frame, text='Get', command=self.get_tle_for_selected_satellite).grid(row=0, column=2)
+            self.target_selection_combo.grid(row=0, column=1, sticky=tk.E)
+            self.target_selection_combo.set('ISS')
+
             # Fetch TLE Input:
             get_tle_frame = ttk.Frame(self)
-            get_tle_frame.grid(row=0, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
-            ttk.Label(get_tle_frame, text='Get TLE from satellite ID:').grid(row=0, column=0, columnspan=3, sticky=tk.E)
-            ttk.Label(get_tle_frame, text='Satellite Catalog ID:').grid(row=1, column=0, sticky=tk.E)
+            get_tle_frame.grid(row=1, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
+            ttk.Label(get_tle_frame, text='Set target from satellite ID:').grid(row=0, column=0, sticky=tk.E)
             self.sat_norad_id_entry = ttk.Entry(get_tle_frame, width=15, font='TkFixedFont')
-            self.sat_norad_id_entry.grid(row=1, column=1)
-            ttk.Button(get_tle_frame, text='Get', command=self.get_and_set_tle_callback).grid(row=1, column=2)
+            self.sat_norad_id_entry.grid(row=0, column=1)
+            ttk.Button(get_tle_frame, text='Get', command=self.get_and_set_tle_callback).grid(row=0, column=2)
             self.sat_name_label = ttk.Label(get_tle_frame, font='TkFixedFont')
-            self.sat_name_label.grid(row=1, column=3, columnspan=2, padx=10, sticky=tk.E+tk.W)
+            self.sat_name_label.grid(row=0, column=3, columnspan=2, padx=10, sticky=tk.E+tk.W)
 
             # TLE Manual Input:
             tle_frame = ttk.Frame(self)
-            tle_frame.grid(row=1, column=0, columnspan=5, padx=(0,10), pady=10)
-            ttk.Label(tle_frame, text='Set target from TLE:').grid(row=0, column=0)
+            tle_frame.grid(row=2, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
+            ttk.Label(tle_frame, text='Set target from TLE:').grid(row=0, column=0, sticky=tk.W)
             self.tle_line1_entry = ttk.Entry(tle_frame, width=69, font='TkFixedFont')
             self.tle_line1_entry.grid(row=1, column=0)
             self.tle_line2_entry = ttk.Entry(tle_frame, width=69, font='TkFixedFont')
@@ -1536,7 +1552,7 @@ class TargetFrame(ttk.Frame):
 
             # RA/Dec Input:
             radec_frame = ttk.Frame(self)
-            radec_frame.grid(row=2, column=0, columnspan=3, padx=(10,0), pady=10)
+            radec_frame.grid(row=3, column=0, columnspan=3, padx=(10,0), pady=10)
             ttk.Label(radec_frame, text='Set target from RA/Dec:').grid(row=0, column=0, columnspan=2)
             ttk.Label(radec_frame, text='RA: (deg)').grid(row=1, column=0, sticky=tk.E)
             self.ra_entry = ttk.Entry(radec_frame, width=25, font='TkFixedFont')
@@ -1549,7 +1565,7 @@ class TargetFrame(ttk.Frame):
 
             # Tracking Time Input:
             time_frame = ttk.Frame(self)
-            time_frame.grid(row=2, column=3, columnspan=3, padx=(10,0), pady=10)
+            time_frame.grid(row=3, column=3, columnspan=3, padx=(10,0), pady=10)
             ttk.Label(time_frame, text='Set tracking time (optional):').grid(row=0, column=0, columnspan=3)
             ttk.Label(time_frame, text='Start: (UTC)').grid(row=1, column=0, sticky=tk.E)
             self.start_entry = ttk.Entry(time_frame, width=25, font='TkFixedFont')
@@ -1564,7 +1580,7 @@ class TargetFrame(ttk.Frame):
 
             # Ephemeris Input:
             get_ephem_frame = ttk.Frame(self)
-            get_ephem_frame.grid(row=3, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
+            get_ephem_frame.grid(row=4, column=0, columnspan=5, padx=(0,10), pady=10, sticky=tk.E+tk.W)
             ttk.Label(get_ephem_frame, text='Get Ephemeris').grid(row=0, column=0, columnspan=3, sticky=tk.E)
             ttk.Label(get_ephem_frame, text='NAIF object ID:').grid(row=1, column=0, sticky=tk.E)
             self.naif_obj_id_entry = ttk.Entry(get_ephem_frame, width=15, font='TkFixedFont')
@@ -1577,7 +1593,7 @@ class TargetFrame(ttk.Frame):
             self.update()
 
         def update(self):
-            self.logger.debug('ManualPopup got update request')
+            self.logger.debug('TargetPopup got update request')
             """Read the target status and fill in fields."""
             target = self.master.sys.target.target_object
             # Clear everything
@@ -1618,7 +1634,9 @@ class TargetFrame(ttk.Frame):
             if self.sat_id:
                 tle = self.master.sys.target.get_tle_from_sat_id(self.sat_id)
                 if tle is not None and len(tle)==3:
+                    self.tle_line1_entry.delete(0, tk.END)
                     self.tle_line1_entry.insert(0,tle[0])
+                    self.tle_line2_entry.delete(0, tk.END)
                     self.tle_line2_entry.insert(0,tle[1])
                     sat_name = tle[2]
                     self.sat_name_label['text'] = sat_name or ''
@@ -1634,6 +1652,16 @@ class TargetFrame(ttk.Frame):
             self.get_tle_callback()
             if self.sat_id is not None:
                 self.set_tle_callback()
+                
+        def get_tle_for_selected_satellite(self):
+            selected_sat_name = self.target_selection_combo.get()
+            self.logger.info('Selected target name: '+selected_sat_name)
+            if selected_sat_name in self.common_targets:
+                self.sat_id = self.common_targets[selected_sat_name]
+            self.sat_norad_id_entry.delete(0, tk.END)
+            self.sat_norad_id_entry.insert(0,str(self.sat_id))
+            self.get_and_set_tle_callback()
+            
                     
         def set_tle_callback(self):
             try:
