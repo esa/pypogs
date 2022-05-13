@@ -607,12 +607,14 @@ class LiveViewFrame(ttk.Frame):
 
     def exposure_entry_callback(self, event):
         """User requested a new exposure time"""
+        old_exposure = None
+        updated_value = None
+        new_value = None
         if event is None: # Clicked increment or decrement button
             entry_value = float(self.exposure_entry.get())
             # Figure out the camera
             cam = self.camera_variable.get()
             self.logger.debug('Incrementing exposure for camera: ' + str(cam))
-            updated_value = None
             if cam == STAR_OL:
                 old_exposure = self.sys.star_camera.exposure_time
                 new_value = round(old_exposure*(1/1.26 if entry_value < old_exposure else 1.26), 2)
@@ -633,7 +635,6 @@ class LiveViewFrame(ttk.Frame):
             cam = self.camera_variable.get()
             new_value = self.exposure_entry.get()
             self.logger.debug('Hit enter on exposure entry, set to camera ' + str(cam) + ' value ' + str(new_value))
-            updated_value = None
             if cam == STAR_OL:
                 self.sys.star_camera.exposure_time = new_value
                 updated_value = self.sys.star_camera.exposure_time
@@ -644,9 +645,15 @@ class LiveViewFrame(ttk.Frame):
                 self.sys.fine_camera.exposure_time = new_value
                 updated_value = self.sys.fine_camera.exposure_time
         # Update box afterwords
-        self.logger.debug('Setting exposure time box to ' + str(updated_value))
-        self.exposure_entry.delete(0, 'end')
-        if updated_value: self.exposure_entry.insert(0, updated_value)											 
+        if updated_value: 
+            self.logger.debug('Setting exposure time box to ' + str(updated_value))
+            self.exposure_entry.delete(0, 'end')
+            self.exposure_entry.insert(0, updated_value)
+            self.logger.debug('exposure_entry_callback succeeded (%s)' % str([event, old_exposure, new_value, updated_value]))
+        else:
+            self.logger.debug('exposure_entry_callback failed (%s)' % str([event, old_exposure, new_value, updated_value]))
+            self.exposure_entry.delete(0, 'end')
+            self.exposure_entry.insert(0, old_exposure)
 
     def click_canvas_callback(self, event):
         self.logger.debug('Canvas click callback')
