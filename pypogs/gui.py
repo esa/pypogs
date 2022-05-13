@@ -865,7 +865,7 @@ class LiveViewFrame(ttk.Frame):
             except:
                 self.logger.warning('Failed to zoom image')
 
-        self.logger.debug('Setting image to: ' + str(img))
+        #self.logger.debug('Setting image to: ' + str(img))
         if img is not None:
             if self.auto_max_variable.get(): #Auto set max scaling
                 maxval = int(np.max(img))
