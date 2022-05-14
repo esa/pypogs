@@ -251,6 +251,7 @@ class System:
         self._auto_align_tolerate_failures = 3
         self._auto_align_vectors = [(40, -135), (60, -135), (60, -45), (40, -45), (40, 45), (60, 45), (60, 135), (40, 135)]
         self._auto_align_settle_time_sec = 1
+        self._auto_align_max_trials = 3
         import atexit
         import weakref
         atexit.register(weakref.ref(self.__del__))
@@ -717,6 +718,15 @@ class System:
         self._auto_align_settle_time_sec = seconds
         
     @property
+    def auto_align_max_trials(self):
+        """Get or set number of trials allowed at each alignment position"""
+        return self._auto_align_max_trials
+
+    @auto_align_max_trials.setter
+    def auto_align_max_trials(self, n_trials):
+        self._auto_align_max_trials = n_trials
+        
+    @property
     def coarse_track_thread(self):
         """pypogs.TrackingThread: Get the coarse tracking thread."""
         return self._coarse_track_thread
@@ -852,7 +862,7 @@ class System:
         self._tetra3 = tetra3
         delf._logger.debug('Set tetra3 instace')
 
-    def do_auto_star_alignment(self, max_trials=1, rate_control=True, pos_list=None, settle_time_sec=None):
+    def do_auto_star_alignment(self, max_trials=None, rate_control=True, pos_list=None, settle_time_sec=None):
         """Do the auto star alignment procedure by taking eight star images across the sky.
 
         Will call System.Alignment.set_alignment_from_observations() with the captured images.
@@ -872,6 +882,8 @@ class System:
             pos_list = self.auto_align_vectors
         if settle_time_sec is None:
             settle_time_sec = self.auto_align_settle_time_sec
+        if max_trials is None:
+            max_trials = self.auto_align_max_trials
 
         def run():
             self._logger.info('Starting auto-alignment with reference vectors: ' + str(pos_list))
