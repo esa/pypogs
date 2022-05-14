@@ -496,7 +496,7 @@ class Camera:
                                            + ' Type:' + str(self.parent._image_data.dtype))
                     for func in self.parent._call_on_image:
                         try:
-                            self.parent._log_debug('Calling back to: ' + str(func))
+                            #self.parent._log_debug('Calling back to: ' + str(func))
                             func(self.parent._image_data, self.parent._image_timestamp)
                         except:
                             self.parent._log_warning('Failed image callback', exc_info=True)
@@ -600,7 +600,7 @@ class Camera:
                                                + ' Type:' + str(self.parent._image_data.dtype))
                         for func in self.parent._call_on_image:
                             try:
-                                self.parent._log_debug('Calling back to: ' + str(func))
+                                #self.parent._log_debug('Calling back to: ' + str(func))
                                 func(self.parent._image_data, self.parent._image_timestamp)
                             except:
                                 self.parent._log_warning('Failed image callback', exc_info=True)

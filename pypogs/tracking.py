@@ -1912,7 +1912,8 @@ class TrackingThread:
             self._image_data = image
             self._image_timestamp = timestamp
             if self._process_image.is_set():
-                self._log_warning('Already processing, dropping frame.')
+                #self._log_warning('Already processing, dropping frame.')
+                pass
             else:
                 self._process_image.set()
                 self._log_debug('Set processing flag')
