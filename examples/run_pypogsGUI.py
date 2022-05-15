@@ -92,6 +92,7 @@ if sys.mount is not None and sys.coarse_camera is not None:
 # SET TARGET:
 #sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544
 sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
+sys.target_server.start(address='127.0.0.1', port=12345)  # Use address 0.0.0.0 if SkyTrack is running on a different computer
 #sys.target.get_ephem(obj_id='-48', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='7', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)

@@ -33,7 +33,7 @@ import logging
 from threading import Thread
 from csv import writer as csv_write, reader as csv_reader
 from time import sleep, time as timestamp
-import socket, struct, math
+import socket, struct, math, re
 
 # External imports:
 import numpy as np
@@ -233,7 +233,8 @@ class System:
         self._coarse_track_thread = None
         self._fine_track_thread = None
         self._control_loop_thread = ControlLoopThread(self)  # Create the control loop thread
-        self._telescope_server = TelescopeServer(self)
+        self._stellarium_telescope_server = StellariumTelescopeServer(self)
+        self._target_server = TargetServer(self)
         # Hardware not managed by threads
         self._star_cam = None
         self._receiver = None
@@ -336,11 +337,21 @@ class System:
     def deinitialize(self):
         """Deinitialise camera, mount, and receiver if they are initialised."""
         self._logger.debug('Deinitialise called')
-        if self.telescope_server is not None:
+        if self.stellarium_telescope_server is not None:
             self._logger.debug('Has telescope server')
-            if self.telescope_server.is_init:
+            if self.stellarium_telescope_server.is_init:
                 try:
-                    self.telescope_server.stop()
+                    self.stellarium_telescope_server.stop()
+                    self._logger.debug('Deinitialized')
+                except BaseException:
+                    self._logger.warning('Failed to deinit', exc_info=True)
+            else:
+                self._logger.debug('Not initialised')
+        if self.target_server is not None:
+            self._logger.debug('Has target server')
+            if self.target_server.is_init:
+                try:
+                    self.target_server.stop()
                     self._logger.debug('Deinitialized')
                 except BaseException:
                     self._logger.warning('Failed to deinit', exc_info=True)
@@ -465,9 +476,14 @@ class System:
         return self._control_loop_thread
 
     @property
-    def telescope_server(self):
-        """System.ControlLoopThread: Get the system control loop thread."""
-        return self._telescope_server
+    def stellarium_telescope_server(self):
+        """System.StellariumTelescopeServer:  Get the Stellarium telescope server object."""
+        return self._stellarium_telescope_server
+
+    @property
+    def target_server(self):
+        """System.TargetServer:  Get the target server object."""
+        return self._target_server
         
     @property
     def alignment(self):
@@ -2157,9 +2173,9 @@ class Target:
                         * apy_unit.au.in_units(apy_unit.m))
             return itrf_xyz
 
-            
-class TelescopeServer:
-    """TelescopeServer creates a telescope telemetry and control daemon to 
+
+class StellariumTelescopeServer:
+    """StellariumTelescopeServer creates a telescope telemetry and control daemon to 
     serve telescope position data to Stellarium and receives slew commands.
     
     The default hosted server address is localhost (127.0.0.1) port 10001.
@@ -2167,7 +2183,7 @@ class TelescopeServer:
     See Stellarium documentation for instructions for how to connect to this
     telescope interface as "External software or remote computer".
     
-    The TelescopeServer thread manages TCP connections
+    The StellariumTelescopeServer thread manages TCP connections
     """
     def __init__(self, parent, address='127.0.0.1', port=10001, poll_period=0.5, debug_folder=None):
         """Create Server instance. See class documentation."""
@@ -2229,10 +2245,10 @@ class TelescopeServer:
     def port(self, port):
         self._port = port
         
-    def start(self, address='127.0.0.1', port=10001, poll_period=0.5, debug_folder=None):
-        self._address     = address
-        self._port        = port
-        self._poll_period = poll_period # sec
+    def start(self, address=None, port=None, poll_period=None):
+        self._address     = address if address is not None else self._address
+        self._port        = port if port is not None else self._port
+        self._poll_period = poll_period if poll_period is not None else self._poll_period # sec
         self._thread      = None
     
         def run():
@@ -2328,3 +2344,155 @@ class TelescopeServer:
             except BaseException:
                 self._logger.warning('Failed to join system worker thread.', exc_info=True)
     
+    
+class TargetServer:
+    """TargetServer creates a target daemon to receive targeting (TLE) data from
+    an external application such as SkyTrack.
+    
+    The default hosted server address is localhost (127.0.0.1) port 12345.
+    """
+    def __init__(self, parent, address='127.0.0.1', port=12345, poll_period=0.5, debug_folder=None):
+        """Create Server instance. See class documentation."""
+        self._address     = address
+        self._port        = port
+        self._poll_period = poll_period # sec
+        
+        # Logger setup
+        self._debug_folder = None
+        if debug_folder is None:
+            self.debug_folder = Path(__file__).parent / 'debug'
+        else:
+            self.debug_folder = debug_folder
+        self._logger = logging.getLogger('pypogs.system.TargetServer')
+        if not self._logger.hasHandlers():
+            # Add new handlers to the logger if there are none
+            self._logger.setLevel(logging.DEBUG)
+            # Console handler at INFO level
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.INFO)
+            # File handler at DEBUG level
+            fh = logging.FileHandler(self.debug_folder / 'pypogs.txt')
+            fh.setLevel(logging.DEBUG)
+            # Format and add
+            formatter = logging.Formatter('%(asctime)s:%(name)s-%(levelname)s: %(message)s')
+            fh.setFormatter(formatter)
+            ch.setFormatter(formatter)
+            self._logger.addHandler(fh)
+            self._logger.addHandler(ch)
+
+        # Start of constructor
+        self._logger.debug('System constructor called')
+        self._thread    = None
+        self._stop_loop = False
+        self._is_init   = False
+        self.parent     = parent
+        
+    @property
+    def is_init(self):
+        """Indicate whether this thread is active"""
+        return self._is_init
+        
+    @property
+    def address(self):
+        """This server address"""
+        return self._address
+
+    @address.setter
+    def address(self, address):
+        self._address = address
+        
+    @property
+    def port(self):
+        """Server port"""
+        return self._port
+
+    @port.setter
+    def port(self, port):
+        self._port = port
+        
+    def start(self, address=None, port=None, poll_period=None):
+        self._address     = address if address is not None else self._address
+        self._port        = port if port is not None else self._port
+        self._poll_period = poll_period if poll_period is not None else self._poll_period # sec
+        self._thread      = None
+    
+        def run():        
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((self._address, self._port))
+                s.settimeout(0.5)
+                
+                # WAITING FOR CONNECTION LOOP
+                s.listen()
+                self._logger.info('Listening for connection on %s port %i' % (self._address, self._port))
+                while not self._stop_loop and self.parent.is_init:
+                    try:
+                        conn, addr = s.accept()
+                        conn.settimeout(self._poll_period)
+                        
+                        # CONNECTED LOOP
+                        self._logger.info('New connection from %s:%d' % addr)
+                        while not self._stop_loop and self.parent.is_init:
+                            try:
+                                data = conn.recv(1024)
+                                if data:
+                                    self._logger.debug('Received %i bytes: %s' % (len(data), data))
+                                    tle = None
+                                    try:
+                                        lines = data.decode('ASCII').splitlines()
+                                        tle = lines[-2:]
+                                        if len(lines)==3:
+                                            satellite_name = lines[0]
+                                            self._logger.info('Received TLE for "%s"' % satellite_name)
+                                    except:
+                                        self._logger.warning('Invalid TLE data:  "%s"' % data)
+                                    if tle is not None:
+                                        self._logger.info('Setting TLE to: %s' % str(tle))
+                                        self.parent.target.set_target_from_tle(tle)
+                                else:
+                                    self._logger.info('Disconnected')
+                                    self._logger.info('Listening for connection...')
+                                    break 
+                            except socket.timeout:  # (no data)
+                                pass
+                            except KeyboardInterrupt:
+                                self._stop_loop = True
+                                break
+
+                            # Send mount position:
+                            '''
+                            mount_alt = self.parent.mount._state_cache['alt'] 
+                            mount_azi  = self.parent.mount._state_cache['azi'] 
+                            mount_ra, mount_dec = (0, 0)
+                            icrs = apy_coord.ICRS()
+                            c = apy_coord.AltAz(
+                              alt = mount_alt*apy_unit.deg, 
+                              az  = mount_azi*apy_unit.deg, 
+                              obstime = apy_time.now(),
+                              location = self.parent.alignment._location
+                            ).transform_to(icrs)
+                            (mount_ra, mount_dec) = (c.ra.value, c.dec.value)
+                            mount_ra = (mount_ra + 360) % 360
+                            #print(mount_ra, mount_dec)
+                            position_report = struct.pack('<hhqLll', 24, 0, 0, int(mount_ra/180*2147483648), int(mount_dec/90*1073741824), 0) #ra, dec in degrees
+                            conn.send(position_report)
+                            '''
+                            
+                    except (socket.timeout, ConnectionResetError, ConnectionAbortedError):  # (no connection)
+                        pass
+                    except KeyboardInterrupt:
+                        self._stop_loop = True
+                        break
+    
+        self._thread = Thread(target=run)
+        self._stop_loop = False
+        self._thread.start()
+        self._is_init = True
+    
+    def stop(self):
+        self._logger.info('Stopping target server')
+        if self._thread is not None:
+            self._stop_loop = True
+            try:
+                self._thread.join()
+            except BaseException:
+                self._logger.warning('Failed to join system worker thread.', exc_info=True)
