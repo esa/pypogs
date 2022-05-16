@@ -46,7 +46,7 @@ from tifffile import imwrite as tiff_write
 # Internal imports:
 sys.path.append('..')  # Add one directory up to path
 from tetra3 import get_centroids_from_image
-from .hardware import Camera
+from .hardware_cameras import Camera
 
 EPS = 10**-6  # Epsilon for use in non-zero check
 DEG = chr(176)  # Degree (unicode) character
