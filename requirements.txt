@@ -7,3 +7,4 @@ skyfield==1.39
 tifffile==2021.7.30
 satellitetle>=0.10.1
 pywin32==303
+zwoasi==0.1.0.1
