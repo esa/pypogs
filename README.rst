@@ -9,10 +9,10 @@ Welcome to (unofficial) pypogs!
 Relation to main ESA project
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This fork is unaffiliated with ESA and managed outside of the main ESA project, but in coordination
-with the main project.  This fork pulls updates form the main project and in some cases may feed 
-forward new features, developed and tested here, if deemed robust and useful to the optical 
-comm goals of the main ESA project.
+This fork is unaffiliated with ESA and managed outside of the main ESA project, in informal 
+coordination with the main project.  This fork pulls updates form the main project and in 
+some cases may feed forward new features, developed and tested here, if deemed robust and 
+useful to the optical comm goals of the main ESA project.
 
 + pypogs **main project**:  https://github.com/esa/pypogs  
 + pypogs **documentation**: https://pypogs.readthedocs.io/  
@@ -36,10 +36,10 @@ With several features added for user convenience:
 + Expanded configurability of auto-alignment routine
  + Self-alignment vectors configurable by command (to avoid my neighbor's trees) 
  + Additional user controls for settling time, retry counts, etc.
-+ Added sidereal tracking button (sometimes useful for finding faint satellites)
++ Sidereal tracking button (sometimes useful for finding faint satellites)
 + Camera settings (gain, exposure, etc) exposed to initialization commands (useful in startup scripts)
-+ Slightly improved start of tracking by projecting intercept point
-+ Added control offset in coarse camera view (to help recover from severe misalignment)
++ Improved start of tracking by projecting intercept point
++ Additional control offset in coarse camera view (to help recover from severe misalignment)
 
 
 ====
@@ -151,8 +151,10 @@ Getting Started
 
 Check hardware compatiblity before proceeding.
 
-Follow `installation instructions <https://pypogs.readthedocs.io/en/latest/installation.html>`_ 
-provided from the main project, **but** clone "https://github.com/rkinnett/pypogs.git" instead of "https://github.com/esa/pypogs.git".
+| Follow `installation instructions <https://pypogs.readthedocs.io/en/latest/installation.html>`_ 
+ provided from the main project, **but** 
+| clone "https://github.com/rkinnett/pypogs.git" 
+| instead of "https://github.com/esa/pypogs.git".
 
 Once installed, run graphical pypogs by:
 
