@@ -9,10 +9,10 @@ Welcome to (unofficial) pypogs!
 Relation to main ESA project
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This fork is unaffiliated with ESA and managed outside of the main ESA project, in informal 
-coordination with the main project.  This fork pulls updates form the main project and in 
-some cases may feed forward new features, developed and tested here, if deemed robust and 
-useful to the optical comm goals of the main ESA project.
+This fork is unaffiliated with ESA and is managed outside of the main ESA project, but
+coordinates informally with the main project.  This fork pulls updates form the main project 
+and in some cases may feed forward new features, developed and tested here, if deemed robust 
+and useful to the optical comm goals of the main ESA project.
 
 + pypogs **main project**:  https://github.com/esa/pypogs  
 + pypogs **documentation**: https://pypogs.readthedocs.io/  
@@ -55,7 +55,7 @@ The telescope mount must be capable of smoothly executing continuous floating-po
 **Telescope Mounts:**  
 
 + Celestron CPC (tested, *recommended*) & NexStar (tested)
-+ iOptron AZMP (tested)
++ iOptron AZMP with `latest firmware <https://www.ioptron.com/Articles.asp?ID=290>`_ (tested)
 + Possibly others via ASCOM (*not* tested)
 + Planned:  Meade LX200 (*not* tested)
 + **not compatible**:  Sky-Watcher (lacking support for rate commands)
@@ -103,7 +103,7 @@ work due to field distortion and field flatness (corners out of focus).
 Recommended star camera lenses:
 
 + For small-chip guide cameras (asi290, etc):  `Fujinon hf35ha-1s 35mm Lens <https://www.rmaelectronics.com/fujinon-hf35ha-1s/>`_ ($110 USD)
-* For large-chip guide cameras (asi174):  `Fujinon hf50ha-1s <https://www.rmaelectronics.com/fujinon-hf50ha-1s/>`_ ($155 USD)
+* For large-chip guide cameras (asi174):  `Fujinon hf50ha-1s 50mm Lens <https://www.rmaelectronics.com/fujinon-hf50ha-1s/>`_ ($155 USD)
 + Budget option for large-chip guide cameras (asi174):  `Arducam C-Mount 50mm Lens <https://www.arducam.com/product/50mm-c-mount-lens-for-hq-camera/>`_ ($46 USD, one test article shows noticeable tilt but works reliably)
 
 
@@ -127,9 +127,9 @@ generally warrant operating pypogs with at least 2 optical systems - one wide fi
 system for auto-alignment and bright object initial acquisition, and a separate, longer focal 
 length system for dim object initial acquisition and fine guiding.*
 
-**Star Camera, Coarse Camera, Fine Camera?**
+**Star Camera, Coarse Camera, or Fine Camera?**
 
-Which camera "type" in pypogs should be associated with which optical system?  It depends.
+Which camera "role" in pypogs should be associated with which optical system?  It depends.
 
 If you are planning to track only bright objects like ISS and CSS, use a wide field system as
 your Coarse Camera, and enable "Link Star/Coarse Cameras" to use this camera in both roles.
