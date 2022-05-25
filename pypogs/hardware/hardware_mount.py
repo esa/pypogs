@@ -142,15 +142,15 @@ class Mount:
         self._serial_port = None
         # Only used for model iOptron AZMP
         self._azmp_command_modes = {b'5035': 'normal', b'9035': 'special'}
-        self._azmp_status = {
-            '0': 'stopped at non-zero pos', 
-            '1': 'tracking with PEC disabled',
-            '2': 'slewing',
-            '3': 'autoguiding',
-            '4': 'meridian flipping',
-            '5': 'tracking with PEC enabled',
-            '6': 'parked',
-            '7': 'stopped at zero pos'
+        self._azmp_states = {
+            b'0': 'stopped at non-zero pos', 
+            b'1': 'tracking with PEC disabled',
+            b'2': 'slewing',
+            b'3': 'autoguiding',
+            b'4': 'meridian flipping',
+            b'5': 'tracking with PEC enabled',
+            b'6': 'parked',
+            b'7': 'stopped at zero pos'
         }
         self._azmp_command_mode_names = self._azmp_command_modes.values()
         self._azmp_command_mode_code = b''
@@ -294,6 +294,7 @@ class Mount:
             serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
             self._logger.debug('Opening serial port: ' + str(serial_port_name))
             r = self._serial_test(serial_port_name, test_command='m', baud=9600, nbytes=2)
+            assert r is not None and len(r)>0, 'Serial port "%s" test failed' % (serial_port_name)
             assert len(r)==2 and r[1] == ord('#'), 'Did not get the expected response from the device'
             self._logger.debug('Setting identity to: '+serial_port_name)
             self._identity = serial_port_name
@@ -303,6 +304,7 @@ class Mount:
             serial_port_name = self._serial_find_port(identity) if identity.isnumeric() else identity
             self._logger.debug('Opening serial port: ' + str(serial_port_name))
             r = self._serial_test(serial_port_name, test_command=':MountInfo#', baud=115200, nbytes=4)
+            assert r is not None and len(r)>0, 'Serial port "%s" test failed' % (serial_port_name)
             assert len(r)==4 and r == b'5035' or r == b'9035', 'Did not get the expected response from the device'
             self._logger.debug('Setting identity to: '+serial_port_name)
             self._identity = serial_port_name
@@ -476,12 +478,12 @@ class Mount:
         """bool: True if the device is in sidereal tracking mode."""
         if self._is_init:
             if self.model.lower() == 'celestron':
-                tracking_mode = self._serial_query('t', '#')
+                tracking_mode = self._serial_query('t', ord('#'))
                 self._is_sidereal_tracking = (tracking_mode is not None and tracking_mode[0] == '1')
             elif self.model.lower() == 'ioptron azmp':
                 # Sidereal tracking (and state query) is only available in normal commanding mode.
                 if self._azmp_command_mode == 'normal':
-                    mount_state = self._serial_query(':GLS#', '#').decode('ASCII')
+                    mount_state = self._serial_query(':GLS#', ord('#')).decode('ASCII')
                     # The 18th digit indicates system status: 1 = tracking with PEC disabled, 5 means tracking with PEC enabled
                     status = mount_state[14]
                     self._logger.debug('Mount tracking state: "%s"' % status)
@@ -677,10 +679,10 @@ class Mount:
                     raise AssertionError('invalid rate query response (azi_axis_rate: "%s", alt_axis_rate: "%s")' % \
                                                                                     (azi_axis_rate, alt_axis_rate))
             else:
-                mount_state = self._serial_query(':GLS#').decode('ASCII')
+                mount_state = self._serial_query(':GLS#')
                 mount_system_status_byte = mount_state[14]
-                mount_system_state = self._azmp_status[mount_system_status_byte]
-                self._logger.debug('AZMP system state: "%s"' % mount_system_state)
+                mount_system_state = self._azmp_states[mount_system_status_byte]
+                self._logger.debug('AZMP system state: "%s" (%s)' % (mount_system_state, mount_system_status_byte))
                 is_moving = mount_system_status_byte in b'12345'
             return is_moving
             
@@ -691,7 +693,7 @@ class Mount:
             self._logger.warning('Forbidden model string defined.')
             raise RuntimeError('An unknown (forbidden) model is defined: '+str(self.model))
 
-    def move_to_alt_az(self, alt, azi, block=True, rate_control=True, tolerance_deg=0.1):
+    def move_to_alt_az(self, alt, azi, block=True, rate_control=True, tolerance_deg=0.001, min_speed=0.001):
         """Move the mount to the given position. Must be initialised.
 
         Args:
@@ -717,7 +719,7 @@ class Mount:
             azi = self.degrees_to_n180_180(azi)
             self._logger.debug('Will command to alt=' + str(alt) + ' azi=' + str(azi))                                                                                    
 
-            if self.model.lower() == 'ioptron azmp':
+            if self.model.lower() == 'ioptron azmp':            
                 self._azmp_set_command_mode('special')
                 
             if not rate_control: # Command mount natively
@@ -735,22 +737,18 @@ class Mount:
 
             else: # Use own control thread
                 self._logger.debug('Starting rate controller')            
-                Kp = 1.5
+                Kp = 0.8
                 self._control_thread_stop = False
                 success = [False]
                 def _loop_slew_to(alt, azi, success):
-                    error_tol = .001  # deg
-                    min_speed = .01  # deg/s
                     if self.model.lower() == 'ascom':  pythoncom.CoInitialize()
                     while not self._control_thread_stop:
                         curr_pos = self.get_alt_az()
                         # Get current position error
                         error_alt = self.degrees_to_n180_180(alt - curr_pos[0])
                         error_azi = self.degrees_to_n180_180(azi - curr_pos[1])
-                                               
-                                                
                         
-                        if abs(error_alt) < error_tol:
+                        if abs(error_alt) < tolerance_deg:
                             rate_alt = 0
                         else:
                             rate_alt = Kp * error_alt
@@ -758,14 +756,14 @@ class Mount:
                             if abs(rate_alt) > self.max_rate[0]: rate_alt = self.max_rate[0] * np.sign(rate_alt)
                             if abs(rate_alt) < min_speed: rate_alt = min_speed * np.sign(rate_alt)
                         
-                        if abs(error_azi) < error_tol:
+                        if abs(error_azi) < tolerance_deg:
                             rate_azi = 0
                         else:
                             rate_azi = Kp * error_azi
                             # Clip to maximum and minimum speeds
                             if abs(rate_azi) > self.max_rate[1]: rate_azi = self.max_rate[1] * np.sign(rate_azi)
                             if abs(rate_azi) < min_speed: rate_azi = min_speed * np.sign(rate_azi)
-                                                                                                                         
+
                         self.set_rate_alt_az(rate_alt, rate_azi)
                         if rate_alt == 0 and rate_azi == 0:
                             success[0] = True
@@ -862,11 +860,7 @@ class Mount:
             t = Thread(target=_get_alt_az, args=(ret,))
             t.start()
             t.join()
-               
-                                                         
-                               
-                                   
-                                   
+
             alt = self.degrees_to_n180_180( float(ret[0]) / 2**32 * 360 + self._alt_zero)
             azi = self.degrees_to_n180_180( float(ret[1]) / 2**32 * 360 )
             self._logger.debug('Mount position: alt=' + str(ret[0]) + ' azi=' + str(ret[1]) \
@@ -985,8 +979,7 @@ class Mount:
                 self._serial_query(azi_rate_command, eol_byte = b'1')
             elif self._azmp_command_mode == 'normal' and alt==0 and azi==0:
                 # support zero-rate commanding in normal mode specifically to support the stop method.
-                # but this condition should not happen.
-                self._serial_query('Q#', eol_byte = b'1')  # "quit slew" command stops 
+                self._serial_query(':Q#', eol_byte = b'1')  # "quit slew" command stops 
             else:
                 raise AssertionError('Non-zero rate requested while mount is not in compatible mode.')
             
@@ -1042,8 +1035,9 @@ class Mount:
         if self.model.lower() == 'celestron':
             success = [False]
             def _set_tracking_on(success):
-                self._serial_send_bytes_command([ord('T'),1])
-                assert self._serial_check_ack('#'), 'Mount did not acknowledge!'
+                #self._serial_send_bytes_command([ord('T'),1])
+                #assert self._serial_check_ack(ord('#')), 'Mount did not acknowledge!'
+                assert self._serial_query('T1') is not None, 'Mount did not acknowledge!'
                 success[0] = True
                 self._is_sidereal_tracking = True
             t = Thread(target=_set_tracking_on, args=(success,))
@@ -1054,10 +1048,11 @@ class Mount:
         elif self.model.lower() == 'ioptron azmp':
             # sidereal tracking (and state check) is only supported in normal commanding mode.
             self._azmp_set_command_mode('normal')
-            if self._azmp_command_mode == 'normal':
-                self._serial_send_text_command(':ST1#')
-                assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
-                self._is_sidereal_tracking = True
+            assert self._azmp_command_mode == 'normal', 'Cannot enable sidereal tracking in "%s" mode' % self._azmp_command_mode
+            assert self._serial_query(':ST1#', b'1') is not None, 'Mount did not acknowledge!'
+            #self._serial_send_text_command(':ST1#')
+            #assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
+            self._is_sidereal_tracking = True
         elif self.model.lower() == 'ascom':
             if hasattr(self._ascom_telescope, 'CanSetTracking') and self._ascom_telescope.CanSetTracking:
                 try:
@@ -1086,14 +1081,15 @@ class Mount:
                 assert success[0], 'Failed communicating with mount'
             elif self.model.lower() == 'ioptron azmp':
                 # sidereal tracking (and state check) is only supported in normal commanding mode.
-                self._azmp_get_command_mode()
+                #self._azmp_get_command_mode()
                 if self._azmp_command_mode == 'normal':
-                    self._serial_send_text_command(':ST0#')
-                    assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
+                    #self._serial_send_text_command(':ST0#')
+                    #assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
+                    assert self._serial_query(':ST1#', b'1') is not None, 'Mount did not acknowledge!'
                     self._is_sidereal_tracking = False
-                    self._azmp_set_command_mode('special')
-                    assert self._azmp_command_mode == 'special', 'Unable to switch mount to special command mode.'
-                    self.get_alt_az()
+                    #self._azmp_set_command_mode('special')
+                    #assert self._azmp_command_mode == 'special', 'Unable to switch mount to special command mode.'
+                    #self.get_alt_az()
                 else:
                     self._is_sidereal_tracking = False
             elif self.model.lower() == 'ascom':
@@ -1188,7 +1184,7 @@ class Mount:
         """PRIVATE: Test if serial communication is established by sending """
         self._logger.debug('Testing serial port "%s" with test command "%s", reading %i bytes' % (
                                                                                 port_name, test_command, nbytes))
-        self._logger.debug('Testing serial port "%s", baud %i' % (port_name, baud))                                                                                   
+        self._logger.debug('Testing serial port "%s", baud %i' % (port_name, baud))                                                                               
         try:
             with serial.Serial(port_name, baud, timeout=3.5, write_timeout=3.5) as ser:
                 ser.write(test_command.encode('ASCII'))
@@ -1198,7 +1194,10 @@ class Mount:
                 return response
         except serial.SerialException:
             self._logger.warning('Failed to communicate on serial port ' + str(port_name), exc_info=True)
-            raise
+            return []
+            #raise
+        
+        
         
     def _serial_port_open(self, port_name, baud=None, timeout=3.5):
         """PRIVATE: Opens serial port specified by port_name string."""
@@ -1237,8 +1236,10 @@ class Mount:
             self._serial_port.reset_input_buffer()
             self._serial_port.reset_output_buffer()            
             self._serial_send_text_command(command)
-            self._serial_port.flush()
+            #self._serial_port.flush()
             response = self._serial_read_to_eol(eol_byte)
+            if response is None:
+                self._logger.warning('No response from mount (query: "%s")' % command)
         except:
             self._logger.debug('Failed to communicate', exc_info=True)
             raise
@@ -1283,7 +1284,7 @@ class Mount:
                     response += r
     '''
                     
-    def _serial_read_to_eol(self, eol_byte=None, timeout=2):
+    def _serial_read_to_eol(self, eol_byte=None, timeout=3):
         """PRIVATE: Read response to the EOL byte character. Return bytes."""
         assert self._serial_is_init, 'Serial port is not initialized'
         eol_byte = eol_byte or self._eol_byte  # Take from self if not given
@@ -1293,15 +1294,14 @@ class Mount:
             r = self._serial_port.read(1)
             if r == eol_byte:
                 #self._logger.debug('Read from mount: '+str(response))
-                break
+                return response
             else:
                 response += r
                 
             if timestamp() > timeout_time:
-                self._logger.info('timed out waiting for serial response')
-                break
+                self._logger.info('timed out waiting for serial response (read: "%s", looking for eol byte: %s)' % (response, eol_byte))
+                return None
             sleep(0.0001)
-        return response                    
 
     def _cel_tracking_off(self):
         """PRIVATE: Disable sidreal tracking on celestron mount."""
@@ -1329,13 +1329,13 @@ class Mount:
         self._logger.info('AZMP command mode is "%s" (%s)' % (self._azmp_command_mode, str(command_mode_code)))
 
     def _azmp_set_command_mode(self, to_mode):
-        self._logger.info('Got request to transition mount to %s commanding mode' % to_mode)
+        self._logger.debug('Got request to transition mount to %s commanding mode' % to_mode)
         self._azmp_get_command_mode()
         if self._azmp_command_mode == to_mode:
             self._logger.debug('Mout is already in command mode "%s"' % self._azmp_command_mode)
         else:
             self._logger.debug('Commanding AZMP mode transition')
             self._serial_send_text_command(':ZZZ#')
-            sleep(2)
+            sleep(2.5)
             self._azmp_get_command_mode()
             assert self._azmp_command_mode == to_mode, 'Failed to transition mount to %s commanding mode"' % to_mode
