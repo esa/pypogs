@@ -16,6 +16,12 @@ open('../pypogs/debug/gui.txt', 'w').close()
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
+# APPLICATION LINKS
+# Use address 127.0.0.1 if the external application runs on this computer.
+# Use address 0.0.0.0 if the external application runs on another computer on your local network.
+sys.stellarium_telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)   # Stellarium connection
+sys.target_server.start(address='127.0.0.1', port=12345, poll_period=1)  # SkyTrack connection
+
 
 # Set custom tetra3 database:
 #sys.tetra3.load_database('my_custom_tetra3_database')  # If my_custom_tetra3_database.npz is in your tetra3 installation directory
@@ -47,11 +53,6 @@ sys.add_mount(model="ASCOM", identity="Simulator")
 #sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
 #sys.add_mount(model="iOptron AZMP", identity="COM2")
 #sys.add_mount(model="Celestron", identity="COM2")
-
-#sys.stellarium_telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)  # use address 127.0.0.1 for access on this computer only
-sys.stellarium_telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)  # use address 0.0.0.0 to make accessible across network
-
-sys.target_server.start(address='127.0.0.1', port=12345, poll_period=1)  # Target server to receive target data from SkyTrack
 
 
 # ADD COARSE CAMERA:

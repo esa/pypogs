@@ -10,6 +10,10 @@ from pathlib import Path
 sys.path.append('..')
 import pypogs
 
+# ClEAR LOGS:
+open('../pypogs/debug/pypogs.txt', 'w').close()
+open('../pypogs/debug/gui.txt', 'w').close()
+
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
@@ -37,8 +41,10 @@ sys.add_mount(
 if sys.mount is not None:
   sys.mount.max_rate = (6, 6)
   sys.mount.alt_limit = (-8, 80)  
-  sys.telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)
+  sys.stellarium_telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)
 '''
+
+
 
 # ADD COARSE CAMERA:
 '''
@@ -92,10 +98,16 @@ if sys.mount is not None and sys.coarse_camera is not None:
 # SET TARGET:
 #sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544
 sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
-sys.target_server.start(address='127.0.0.1', port=12345)  # Use address 0.0.0.0 if SkyTrack is running on a different computer
 #sys.target.get_ephem(obj_id='-48', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='7', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
 #sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+
+# APPLICATION LINKS
+# Use address 127.0.0.1 if the external application runs on this computer.
+# Use address 0.0.0.0 if the external application runs on another computer on your local network.
+sys.stellarium_telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)   # Stellarium connection
+sys.target_server.start(address='127.0.0.1', port=12345, poll_period=1)  # SkyTrack connection
+
 
 
 # START GUI:

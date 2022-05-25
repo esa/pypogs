@@ -9,6 +9,10 @@ import sys
 sys.path.append('..')
 import pypogs
 
+# ClEAR LOGS:
+open('../pypogs/debug/pypogs.txt', 'w').close()
+open('../pypogs/debug/gui.txt', 'w').close()
+
 # INITIALIZE PYPOGS SYSTEM:
 sys = pypogs.System()
 
@@ -23,44 +27,15 @@ sys.alignment.set_alignment_enu()
 
 # ADD MOUNT:
 #sys.add_mount(model="ASCOM", identity="Simulator")
-#sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
-sys.add_mount(model="iOptron AZMP", identity="COM2")
-#sys.add_mount(model="Celestron", identity="COM2")
+#sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))  # ascom inverts alt axis?
+#sys.add_mount(model="iOptron AZMP", identity="COM2", max_rate=(16, 16))
+sys.add_mount(model="Celestron", identity="COM5")
 
-
-# ADD COARSE CAMERA:
-coarsePlateScale = 206 * 5.86 / (400*0.65) # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
-#sys.add_coarse_camera(model="ASCOM", identity="Simulator")
-#sys.add_coarse_camera(model="ASCOM", identity="ASICamera2_1")
-
-'''
-sys.add_coarse_camera(
-  model="ASCOM", 
-  #identity="ASICamera2",
-  identity="ASICamera2_2",
-  #identity="Simulator",
-  exposure_time = 200,
-  gain = 200,
-  plate_scale = round(coarsePlateScale, 3),  
-  binning = 2
-)
-'''
-
-# ADD STAR CAMERA:
-#sys.add_star_camera_from_coarse()
-
-
-# ADD FINE CAMERA:
-#finePlateScale = 206 * 5.86 / 2350 # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
-#sys.add_fine_camera(model="ASCOM", identity="ASICamera2", exposure_time=500, gain=260, plate_scale=finePlateScale)
-
-
-# SET TARGET:
-sys.target.get_and_set_tle_from_sat_id(25544)  # ISS = 25544
-#sys.target.get_and_set_tle_from_sat_id(23712)  # ISS = 25544
-#sys.target.get_ephem(obj_id='-48', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
-#sys.target.get_ephem(obj_id='7', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
-#sys.target.get_ephem(obj_id='-170', lat=MySite.lat, lon=MySite.lon, height=MySite.elev)  # JWST
+# APPLICATION LINKS
+# Use address 127.0.0.1 if the external application runs on this computer.
+# Use address 0.0.0.0 if the external application runs on another computer on your local network.
+sys.stellarium_telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)   # Stellarium connection
+sys.target_server.start(address='127.0.0.1', port=12345, poll_period=1)  # SkyTrack connection
 
 
 # START GUI:
