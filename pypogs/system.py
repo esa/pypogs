@@ -2252,7 +2252,7 @@ class StellariumTelescopeServer:
         self._thread      = None
     
         def run():
-            if self.parent.mount.model == 'ASCOM':  
+            if self.parent.mount is not None and self.parent.mount.model == 'ASCOM':  
                 import pythoncom
                 pythoncom.CoInitialize()
         

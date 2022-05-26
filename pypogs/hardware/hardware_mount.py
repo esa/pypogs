@@ -1229,7 +1229,7 @@ class Mount:
         returns:  ASCII string response from mount up to and including EOL byte character.
         """
         assert self._serial_port is not None and self._serial_is_init, 'Serial port is not initialized'
-        response = ''
+        response = b''
         self._logger.debug('Sending serial command "%s" to mount' % str(command))
         eol_byte = eol_byte or self._eol_byte  # Take from self if not given
         try:
@@ -1240,6 +1240,7 @@ class Mount:
             response = self._serial_read_to_eol(eol_byte)
             if response is None:
                 self._logger.warning('No response from mount (query: "%s")' % command)
+                response = b''
         except:
             self._logger.debug('Failed to communicate', exc_info=True)
             raise

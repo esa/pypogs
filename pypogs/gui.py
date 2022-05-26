@@ -607,7 +607,7 @@ class LiveViewFrame(ttk.Frame):
 
     def exposure_entry_callback(self, event):
         """User requested a new exposure time"""
-        self.logger.info('exposure_entry_callback', event)
+        self.logger.info('exposure_entry_callback, event: ' + str(event))
         old_exposure = None
         updated_value = None
         new_value = None
