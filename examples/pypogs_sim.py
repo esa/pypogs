@@ -86,6 +86,51 @@ sys.add_star_camera(
 #finePlateScale = 206 * 5.86 / 2350 # arcsec/pixel,  206 * pixel_pitch_um / focal_length_mm
 #sys.add_fine_camera(model="ASCOM", identity="ASICamera2", exposure_time=500, gain=260, plate_scale=finePlateScale)
 
+if sys.mount is not None:
+
+    # GENERAL FEEDBACK SETTINGS:
+    sys.control_loop_thread.integral_max_add = 36 #30
+    sys.control_loop_thread.integral_max_subtract = 360 #30
+    sys.control_loop_thread.integral_min_rate = 0 #5
+
+    # OPEN LOOP TRACKING SETTINGS:
+    sys.control_loop_thread.OL_P = 0.5 #1
+    sys.control_loop_thread.OL_I = 10
+    sys.control_loop_thread.OL_speed_limit = 10*3600  # increased from 7200 arcsec/sec to improve zenith recovery    
+
+    # COARSE TRACKING SETTINGS:
+    if sys.coarse_camera is not None:
+        sys.coarse_track_thread.spot_tracker.smoothing_parameter = 4
+        sys.coarse_track_thread.spot_tracker.sigma_mode = 'global_root_square'
+        sys.coarse_track_thread.spot_tracker.bg_subtract_mode = 'local_mean'
+        sys.coarse_track_thread.spot_tracker.filtsize = 25
+
+        sys.coarse_track_thread.spot_tracker.max_search_radius = 1000 #500
+        sys.coarse_track_thread.spot_tracker.min_search_radius = 200
+        sys.coarse_track_thread.spot_tracker.spot_min_sum = 50 #500
+        sys.coarse_track_thread.spot_tracker.spot_min_area = 6 #3
+        sys.coarse_track_thread.spot_tracker.fails_to_drop = 10
+        sys.coarse_track_thread.spot_tracker.smoothing_parameter = 4 #8
+        sys.coarse_track_thread.spot_tracker.rmse_smoothing_parameter = 8
+        sys.coarse_track_thread.feedforward_threshold = 10
+
+        sys.control_loop_thread.CCL_P = 0.5 #1
+        sys.control_loop_thread.CCL_I = 8 #5
+        sys.control_loop_thread.CCL_speed_limit = 3600
+        sys.control_loop_thread.CCL_transition_th = 200 # increased from 100 to tolerate more drift
+
+    # FINE TRACKING SETTINGS:
+    if sys.fine_camera is not None:
+        sys.fine_track_thread.spot_tracker.smoothing_parameter = 4
+        sys.fine_track_thread.spot_tracker.sigma_mode = 'global_root_square'
+        sys.fine_track_thread.spot_tracker.bg_subtract_mode = 'local_mean'
+        sys.fine_track_thread.spot_tracker.filtsize = 25
+
+        sys.control_loop_thread.FCL_P = 1 #2
+        sys.control_loop_thread.FCL_I = 5 #5
+        sys.control_loop_thread.FCL_speed_limit = 60  # keep this small to reduce smear in primary imaging camera
+        sys.control_loop_thread.FCL_transition_th = 200 # increased from 100 to tolerate more drift
+
 
 
 # SET TARGET:
