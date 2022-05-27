@@ -143,14 +143,14 @@ class Mount:
         # Only used for model iOptron AZMP
         self._azmp_command_modes = {b'5035': 'normal', b'9035': 'special'}
         self._azmp_states = {
-            b'0': 'stopped at non-zero pos', 
-            b'1': 'tracking with PEC disabled',
-            b'2': 'slewing',
-            b'3': 'autoguiding',
-            b'4': 'meridian flipping',
-            b'5': 'tracking with PEC enabled',
-            b'6': 'parked',
-            b'7': 'stopped at zero pos'
+            '0': 'stopped at non-zero pos', 
+            '1': 'tracking with PEC disabled',
+            '2': 'slewing',
+            '3': 'autoguiding',
+            '4': 'meridian flipping',
+            '5': 'tracking with PEC enabled',
+            '6': 'parked',
+            '7': 'stopped at zero pos'
         }
         self._azmp_command_mode_names = self._azmp_command_modes.values()
         self._azmp_command_mode_code = b''
@@ -679,11 +679,19 @@ class Mount:
                     raise AssertionError('invalid rate query response (azi_axis_rate: "%s", alt_axis_rate: "%s")' % \
                                                                                     (azi_axis_rate, alt_axis_rate))
             else:
+                mount_system_status_char = ''
                 mount_state = self._serial_query(':GLS#')
-                mount_system_status_byte = mount_state[14]
-                mount_system_state = self._azmp_states[mount_system_status_byte]
-                self._logger.debug('AZMP system state: "%s" (%s)' % (mount_system_state, mount_system_status_byte))
-                is_moving = mount_system_status_byte in b'12345'
+                print(mount_state)
+                assert mount_state is not None and len(mount_state)>14, 'Unexpected AZMP state query response: "%s"' % mount_state                
+                try:
+                    mount_system_status_char = mount_state.decode('ASCII')[14]
+                    print(mount_system_status_char)
+                    mount_system_state = self._azmp_states[mount_system_status_char]
+                    self._logger.debug('AZMP system state: "%s" (%s)' % (mount_system_state, mount_system_status_char))
+                except KeyError:
+                    self._logger.warning('Unexpected AZMP state query response: "%s", status byte: %s' % (mount_state, mount_state.decode[14]))
+                assert mount_system_status_char in self._azmp_states, 'Invalid AZMP state index: %s' % mount_system_status_char
+                is_moving = mount_system_status_char in '12345'  # azmp motion states are between 1 and 5 inclusive
             return is_moving
             
         elif self.model.lower() == 'ascom':
@@ -1085,7 +1093,7 @@ class Mount:
                 if self._azmp_command_mode == 'normal':
                     #self._serial_send_text_command(':ST0#')
                     #assert self._serial_check_ack('1'), 'Mount did not acknowledge!'
-                    assert self._serial_query(':ST1#', b'1') is not None, 'Mount did not acknowledge!'
+                    assert self._serial_query(':ST0#', b'1') is not None, 'Mount did not acknowledge!'
                     self._is_sidereal_tracking = False
                     #self._azmp_set_command_mode('special')
                     #assert self._azmp_command_mode == 'special', 'Unable to switch mount to special command mode.'
