@@ -172,7 +172,7 @@ class Mount:
             self.model = model
         if identity is not None:
             self.identity = identity
-        if model is not None:
+        if self.model is not None:
             self.initialize()
             
         available_properties = self.available_properties
@@ -1181,12 +1181,10 @@ class Mount:
         port_index = int(port_index)
         self._logger.debug('Searching for serial port at index: ' +str(port_index))
         ports = self.list_available_ports()
-        self._logger.debug('Found ports: ' + str(ports))
-        try:
-            return ports[port_index][0]
-        except IndexError:
-            self._logger.debug('Index error', exc_info=True)
-            raise AssertionError('No serial port for index: '+str(identity))
+        num_ports = len(ports)
+        self._logger.debug('Found '+str(num_ports)+' ports: ' + str(ports))
+        assert port_index < num_ports, 'Port index %i out of range (%i ports found)' % (port_index, num_ports)
+        return ports[port_index][0]
 
     def _serial_test(self, port_name, baud, test_command, nbytes):
         """PRIVATE: Test if serial communication is established by sending """
