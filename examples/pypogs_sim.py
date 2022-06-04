@@ -19,7 +19,8 @@ sys = pypogs.System()
 # APPLICATION LINKS
 # Use address 127.0.0.1 if the external application runs on this computer.
 # Use address 0.0.0.0 if the external application runs on another computer on your local network.
-sys.stellarium_telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)   # Stellarium connection
+#sys.stellarium_telescope_server.start(address='127.0.0.1', port=10001, poll_period=1)   # Stellarium connection
+sys.stellarium_telescope_server.start(address='0.0.0.0', port=10001, poll_period=1)   # Stellarium connection
 sys.target_server.start(address='127.0.0.1', port=12345, poll_period=1)  # SkyTrack connection
 
 
@@ -29,11 +30,11 @@ sys.target_server.start(address='127.0.0.1', port=12345, poll_period=1)  # SkyTr
 
 
 # CONFIGURE GROUND STATION SITE:
-class MySite:
-  lat  =   34.24  # degrees N
-  lon  = -118.24  # degrees E
-  elev =   600   # meters above MSL
-sys.alignment.set_location_lat_lon(lat=MySite.lat, lon=MySite.lon, height=MySite.elev)
+sys.alignment.set_location_lat_lon(
+  lat = 34,      # degrees N
+  lon = -118,    # degrees E
+  height = 500    # meters MSL
+)
 sys.alignment.set_alignment_enu()
 #sys.alignment.get_alignment_data_form_file('../pypogs/data/2022-03-09T050113_Alignment_from_obs.csv')
 
@@ -49,7 +50,8 @@ sys.auto_align_vectors = auto_align_vectors
 '''
 
 # ADD MOUNT:
-sys.add_mount(model="ASCOM", identity="Simulator")
+# Note:  it appears ASCOM inverts the alt axis, hence -1 axis direction.
+sys.add_mount(model="ASCOM", identity="Simulator", max_rate=(10, 10), alt_limit=(-8, 95), axis_directions=(1, -1))
 #sys.add_mount(model="ASCOM", identity="DeviceHub", axis_directions=(1, -1))
 #sys.add_mount(model="iOptron AZMP", identity="COM2")
 #sys.add_mount(model="Celestron", identity="COM2")
