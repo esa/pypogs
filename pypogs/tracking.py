@@ -197,8 +197,8 @@ class ControlLoopThread:
         self._int_max_sub = .1
         self._int_min_rate = 0.0  # Minimum rate (deg/s) of the mount to activate the integral term
         # Rate avoidance settings
-        self._avoid_azi_rates = np.array([360]) # Array of rates (deg/s) to avoid
-        self._avoid_alt_rates = np.array([360]) # Array of rates (deg/s) to avoid
+        self._avoid_azi_rates = None # Array of rates (deg/s) to avoid
+        self._avoid_alt_rates = None # Array of rates (deg/s) to avoid
         self._rate_avoidance_half_width = 0.0  # Width (deg/s) of buffer around rates to be avoided
         # Open loop
         self._OL_Kp = 1.0  # Feedback gain (deg/s per degree error)
@@ -395,7 +395,9 @@ class ControlLoopThread:
     @avoid_azi_rates.setter
     def avoid_azi_rates(self, rates):
         self._log_debug('Avoid az rates set got: ' + str(rates))
-        if type(rates) in (int, float):
+        if rates is None:
+            self._avoid_azi_rates = None
+        elif type(rates) in (int, float):
             self._avoid_azi_rates = np.array([rates])
         elif type(rates) in (tuple,):
             self._avoid_azi_rates = np.array(rates)        
@@ -412,7 +414,9 @@ class ControlLoopThread:
     @avoid_alt_rates.setter
     def avoid_alt_rates(self, rates):
         self._log_debug('Avoid alt rates set got: ' + str(rates))
-        if type(rates) in (int, float):
+        if rates is None:
+            self._avoid_alt_rates = None
+        elif type(rates) in (int, float):
             self._avoid_alt_rates = np.array([rates])
         elif type(rates) in (tuple,):
             self._avoid_alt_rates = np.array(rates)        
@@ -1257,20 +1261,24 @@ class ControlLoopThread:
                 azimuth rates in degrees per second.
         """
         # Reorder avoidance rates in descending order:
-        if self._avoid_alt_rates.shape != (1,):
-            self._avoid_alt_rates[::-1].sort()[::-1]
-        if self._avoid_azi_rates.shape != (1,):
-            self._avoid_azi_rates[::-1].sort()[::-1]
+        try:
+            if self._avoid_alt_rates is not None and self._avoid_alt_rates.shape != (1,):
+                self._avoid_alt_rates[::-1].sort()[::-1]
+            if self._avoid_azi_rates is not None and self._avoid_azi_rates.shape != (1,):
+                self._avoid_azi_rates[::-1].sort()[::-1]
+        except TypeError:
+            pass
         
         avoidance_rates = [self._avoid_alt_rates, self._avoid_azi_rates]
         adjusted_rates = desired_rates
         for axis in [0, 1]:
             desired_rate_sign = np.sign(adjusted_rates[axis])
             desired_rate_abs  = np.abs(adjusted_rates[axis])
-            for avoid_rate in reversed(avoidance_rates[axis]):            
-                if (avoid_rate-self._rate_avoidance_half_width) < desired_rate_abs < (avoid_rate+self._rate_avoidance_half_width):
-                    adjusted_rates[axis] = (avoid_rate-self._rate_avoidance_half_width)*desired_rate_sign
-                    #print('Clipping axis %i rate to %0.3f' % (axis, avoid_rate-self._rate_avoidance_half_width))
+            if avoidance_rates[axis] is not None:
+                for avoid_rate in avoidance_rates[axis]:            
+                    if (avoid_rate-self._rate_avoidance_half_width) < desired_rate_abs < (avoid_rate+self._rate_avoidance_half_width):
+                        adjusted_rates[axis] = (avoid_rate-self._rate_avoidance_half_width)*desired_rate_sign
+                        #print('Clipping axis %i rate to %0.3f' % (axis, avoid_rate-self._rate_avoidance_half_width))
         return adjusted_rates
             
 
