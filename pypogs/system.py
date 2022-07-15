@@ -2271,7 +2271,7 @@ class StellariumTelescopeServer:
                         # CONNECTED LOOP
                         self._logger.info('New connection from %s:%d' % addr)
                         while not self._stop_loop and self.parent.is_init:
-                            if self.parent.mount.is_init:
+                            if self.parent.mount and self.parent.mount.is_init:
                                 try:
                                     data = conn.recv(1024)
                                     if data:

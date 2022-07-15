@@ -196,6 +196,10 @@ class ControlLoopThread:
         self._int_max_add = .01  # Maximum error (deg) to add to the integral term per loop.
         self._int_max_sub = .1
         self._int_min_rate = 0.0  # Minimum rate (deg/s) of the mount to activate the integral term
+        # Rate avoidance settings
+        self._avoid_azi_rates = np.array([360]) # Array of rates (deg/s) to avoid
+        self._avoid_alt_rates = np.array([360]) # Array of rates (deg/s) to avoid
+        self._rate_avoidance_half_width = 0.0  # Width (deg/s) of buffer around rates to be avoided
         # Open loop
         self._OL_Kp = 1.0  # Feedback gain (deg/s per degree error)
         self._OL_Ki = 1/10  # Integral gain (1/integral time [s])
@@ -308,6 +312,7 @@ class ControlLoopThread:
         """tuple of str: Get the available tracking parameters (e.g. gains)."""
         return ('max_frequency', 'reset_integral_if_saturated', 'integral_max_add',
                 'integral_max_subtract', 'integral_min_rate', 'OL_P', 'OL_I', 'OL_speed_limit',
+                'avoid_azi_rates', 'avoid_alt_rates', 'rate_avoidance_half_width',
                 'CCL_enable', 'CCL_P', 'CCL_I', 'CCL_speed_limit', 'CCL_transition_th',
                 'FCL_enable', 'FCL_P', 'FCL_I', 'FCL_speed_limit', 'FCL_transition_th',
                 'CTFSP_enable', 'CTFSP_spacing', 'CTFSP_speed', 'CTFSP_max_radius',
@@ -380,6 +385,52 @@ class ControlLoopThread:
         self._log_debug('Int min rate set got: ' + str(min_rate))
         self._int_min_rate = float(min_rate) / 3600
         self._log_debug('Int max add set to: ' + str(self.integral_min_rate))
+        
+    @property
+    def avoid_azi_rates(self):
+        """tuple of float: Get or set azimuth axis rates (deg per second) to avoid.
+        """
+        return self._avoid_azi_rates  # Deg/s internally
+
+    @avoid_azi_rates.setter
+    def avoid_azi_rates(self, rates):
+        self._log_debug('Avoid az rates set got: ' + str(rates))
+        if type(rates) in (int, float):
+            self._avoid_azi_rates = np.array([rates])
+        elif type(rates) in (tuple,):
+            self._avoid_azi_rates = np.array(rates)        
+        elif type(rates) in (str,):
+            self._avoid_azi_rates = np.array([float(r) for r in rates.replace('[','').replace(']','').split(',')])
+        self._log_debug('Avoid az rates set to: ' + str(self.avoid_azi_rates))        
+
+    @property
+    def avoid_alt_rates(self):
+        """tuple of float: Get or set altitude axis rates (deg per second) to avoid.
+        """
+        return self._avoid_alt_rates  # Deg/s internally
+
+    @avoid_alt_rates.setter
+    def avoid_alt_rates(self, rates):
+        self._log_debug('Avoid alt rates set got: ' + str(rates))
+        if type(rates) in (int, float):
+            self._avoid_alt_rates = np.array([rates])
+        elif type(rates) in (tuple,):
+            self._avoid_alt_rates = np.array(rates)        
+        elif type(rates) in (str,):
+            self._avoid_alt_rates = np.array([float(r) for r in rates.replace('[','').replace(']','').split(',')])
+        self._log_debug('Avoid alt rates set to: ' + str(self.avoid_alt_rates))        
+
+    @property
+    def rate_avoidance_half_width(self):
+        """float: Get or set width (deg per second) of buffer around rates to be avoided.
+        """
+        return self._rate_avoidance_half_width  # Deg/s internally
+
+    @rate_avoidance_half_width.setter
+    def rate_avoidance_half_width(self, width):
+        self._log_debug('Rate avoidance half width set got: ' + str(width))
+        self._rate_avoidance_half_width = float(width)
+        self._log_debug('Rate avoidance half width set to: ' + str(self.rate_avoidance_half_width))        
 
     @property
     def OL_P(self):
@@ -1086,9 +1137,10 @@ class ControlLoopThread:
                     self._parent.coarse_track_thread.goal_offset_x_y = list(rot_offset)
                     self._log_debug('FB updated: ' + str(angvel_correction))
                     self._log_debug('Offset set: ' + str(rot_offset))
-                # Calculate total rates
+                # Calculate total rates                
                 angvel_total = self._get_safe_rates(angvel_correction + target_mnt_rate,
                                                     mount_mnt_altaz)
+                angvel_total = self._avoid_rates(angvel_total)                                                    
                 self._log_debug('Sending rates: ' + str(angvel_total))
                 # Check post-calc clearing conditions
                 if saturated and self._reset_integral_if_saturated:
@@ -1195,6 +1247,32 @@ class ControlLoopThread:
         if self._parent.receiver is not None and self._parent.receiver.is_running:
             self._parent.receiver.stop()
         self._log_info('Tracking ended')
+
+    def _avoid_rates(self, desired_rates):
+        """PRIVATE:  If desired rate for either axis is within the avoidane half-width of a
+        rate to be avoided, then clip the rate to the lower bound of the avoidance window.
+        
+        Args:
+            desired_rates (numpy.ndarray, tuple, list): length 2 array with desired altitude and
+                azimuth rates in degrees per second.
+        """
+        # Reorder avoidance rates in descending order:
+        if self._avoid_alt_rates.shape != (1,):
+            self._avoid_alt_rates[::-1].sort()[::-1]
+        if self._avoid_azi_rates.shape != (1,):
+            self._avoid_azi_rates[::-1].sort()[::-1]
+        
+        avoidance_rates = [self._avoid_alt_rates, self._avoid_azi_rates]
+        adjusted_rates = desired_rates
+        for axis in [0, 1]:
+            desired_rate_sign = np.sign(adjusted_rates[axis])
+            desired_rate_abs  = np.abs(adjusted_rates[axis])
+            for avoid_rate in reversed(avoidance_rates[axis]):            
+                if (avoid_rate-self._rate_avoidance_half_width) < desired_rate_abs < (avoid_rate+self._rate_avoidance_half_width):
+                    adjusted_rates[axis] = (avoid_rate-self._rate_avoidance_half_width)*desired_rate_sign
+                    #print('Clipping axis %i rate to %0.3f' % (axis, avoid_rate-self._rate_avoidance_half_width))
+        return adjusted_rates
+            
 
     def _get_safe_rates(self, desired_rates, curr_alt_az=None):
         """PRIVATE: Limit the desired rates to safe values such that the maximum speed and position

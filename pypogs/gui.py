@@ -279,7 +279,7 @@ class ControlPropertiesFrame(ttk.Frame):
                     label.grid(row=row, column=column, sticky=tk.E)
                     try:
                         name = prop
-                        value = str(getattr(self.device, name))
+                        value = str(getattr(self.device, name)).replace(' ',',')
                         entry.insert(0, value)
                         label['text'] = name
                     except AttributeError as err:
@@ -302,7 +302,7 @@ class ControlPropertiesFrame(ttk.Frame):
         def set_properties(self):
             self.logger.debug('Got set properties. Here are the entries:')
             for name, entry, old_value, label in self.property_entries:
-                new_value = entry.get()
+                new_value = entry.get().replace('[','').replace(']','')
                 if not new_value == old_value:
                     if name in ('sigma_mode', 'bg_subtract_mode'):
                         parsed = new_value
@@ -1678,6 +1678,7 @@ class TargetFrame(ttk.Frame):
                     self.logger.debug(tle[2])
                 else:
                     self.logger.info('Failed to retrieve TLE for sat ID ' +str(self.sat_id))
+                    self.logger.info(tle)
                     self.sat_name_label['text'] = '(failed)'                    
 
         def get_and_set_tle_callback(self):
