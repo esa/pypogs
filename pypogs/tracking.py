@@ -192,6 +192,7 @@ class ControlLoopThread:
                                    'ft_search_rad': None}
         self._state_cache = self._empty_state_cache
         # Tracking feedback settings
+        self._projection_time_adjustment = 0  # Projection time adjustment in seconds
         self._reset_integral_if_saturated = True
         self._int_max_add = .01  # Maximum error (deg) to add to the integral term per loop.
         self._int_max_sub = .1
@@ -310,7 +311,7 @@ class ControlLoopThread:
     @property
     def available_properties(self):
         """tuple of str: Get the available tracking parameters (e.g. gains)."""
-        return ('max_frequency', 'reset_integral_if_saturated', 'integral_max_add',
+        return ('max_frequency', 'projection_time_adjustment', 'reset_integral_if_saturated', 'integral_max_add',
                 'integral_max_subtract', 'integral_min_rate', 'OL_P', 'OL_I', 'OL_speed_limit',
                 'avoid_azi_rates', 'avoid_alt_rates', 'rate_avoidance_half_width',
                 'CCL_enable', 'CCL_P', 'CCL_I', 'CCL_speed_limit', 'CCL_transition_th',
@@ -333,6 +334,17 @@ class ControlLoopThread:
         else:
             self._min_loop_time = 1 / float(hz)
         self._log_debug('Set min loop time to: ' + str(self._min_loop_time))
+
+    @property
+    def projection_time_adjustment(self):
+        """float or None: Get or set projetion time delta in seconds"""
+        return self._projection_time_adjustment
+
+    @projection_time_adjustment.setter
+    def projection_time_adjustment(self, seconds):
+        self._log_info('Got set time delta with: ' + str(seconds))
+        self._projection_time_adjustment = float(seconds)
+        self._log_debug('Set time delta to: ' + str(self._projection_time_adjustment) + ' seconds')
 
     @property
     def reset_integral_if_saturated(self):
@@ -847,7 +859,7 @@ class ControlLoopThread:
                 # CONTROL LOOP #
                 # Time info:
                 loop_timestamp = seconds_since_start()
-                loop_utctime = apy_time.now()  # Astropy timestamp in UTC
+                loop_utctime = apy_time.now() + apy_time_delta(self.projection_time_adjustment, format='sec')  # Astropy timestamp in UTC
                 dt = loop_timestamp - last_timestamp if last_timestamp is not None else 0.0
                 last_timestamp = loop_timestamp
                 self._log_debug('Control loop timestamp: '+str(loop_timestamp))

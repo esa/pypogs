@@ -37,7 +37,7 @@ import socket, struct, math, re
 
 # External imports:
 import numpy as np
-from astropy.time import Time as apy_time, TimeDelta
+from astropy.time import Time as apy_time, TimeDelta as apy_time_delta
 from astropy import units as apy_unit, coordinates as apy_coord, utils as apy_util
 from satellite_tle import fetch_tle_from_celestrak
 from skyfield import sgp4lib as sgp4
@@ -1015,7 +1015,7 @@ class System:
             numpy.ndarray: Nx2 array with altitude and azimuth rates in degrees per second.
         """
         if times is None:
-            times = apy_time.now()
+            times = apy_time.now() + apy_time_delta(self._control_loop_thread.projection_time_adjustment, format='sec')
         assert isinstance(times, apy_time), 'Times must be astropy time'
         # Extend the time vector by 0.1 second if only one time
         single_time = (times.size == 1)
@@ -1055,7 +1055,7 @@ class System:
         """
         assert self.target.has_target, 'No target set'
         if times is None:
-            times = apy_time.now()
+            times = apy_time.now() + apy_time_delta(self._control_loop_thread.projection_time_adjustment, format='sec')
         assert isinstance(times, apy_time), 'Times must be astropy time'
         if isinstance(self.target.target_object, sgp4.EarthSatellite):
             pos = self.target.get_target_itrf_xyz(times)
@@ -1084,7 +1084,7 @@ class System:
         assert self.mount is not None, 'No Mount'
         assert self.is_init, 'System not initialized'
         if time is None:
-            time = apy_time.now()
+            time = apy_time.now() + apy_time_delta(self._control_loop_thread.projection_time_adjustment, format='sec')
         assert isinstance(time, apy_time), 'Times must be astropy time'
         if time.size == 1:
             alt_azi = self.get_alt_az_of_target(time)[0]
@@ -1193,7 +1193,7 @@ class System:
                 self.mount.move_to_alt_az(*altaz, rate_control=rate_control, block=True)
                 for trial in range(max_trials):
                     img = self.star_camera.get_next_image()
-                    timestamp = apy_time.now()
+                    timestamp = apy_time.now() + apy_time_delta(self._control_loop_thread.projection_time_adjustment, format='sec')
                     # TODO: Test
                     fov_estimate = self.star_camera.plate_scale * img.shape[1] / 3600
                     solution = self.tetra3.solve_from_image(img, fov_estimate=fov_estimate, fov_max_error=.1)
@@ -2046,7 +2046,7 @@ class Target:
             height (float):   Site elevation above mean sea level (meters)
         """
         utc_now = apy_time.now()
-        utc_tomorrow = utc_now + TimeDelta(1, format='jd')
+        utc_tomorrow = utc_now + apy_time_delta(1, format='jd')
         time_step_minutes = 30
         self._ephem = Ephem(obj_id, utc_now.strftime('%Y-%m-%d %H:00:00'), utc_tomorrow.strftime('%Y-%m-%d %H:00:00'), time_step_minutes, lat, lon, height)
         self.target_object = self._ephem
@@ -2163,7 +2163,7 @@ class Target:
         """
         assert self.has_target, 'No target set.'
         if times is None:
-            times = apy_time.now()
+            times = apy_time.now() + apy_time_delta(self._control_loop_thread.projection_time_adjustment, format='sec')
         if isinstance(self._target, apy_coord.SkyCoord):
             itrs = self._target.transform_to(apy_coord.ITRS(obstime=times))
             return np.array(itrs.data.xyz)
@@ -2185,7 +2185,7 @@ class StellariumTelescopeServer:
     
     The StellariumTelescopeServer thread manages TCP connections
     """
-    def __init__(self, parent, address='127.0.0.1', port=10001, poll_period=0.5, debug_folder=None):
+    def __init__(self, parent, address='127.0.0.1', port=10001, poll_period=0.1, debug_folder=None):
         """Create Server instance. See class documentation."""
         self._address     = address
         self._port        = port
@@ -2271,7 +2271,8 @@ class StellariumTelescopeServer:
                         # CONNECTED LOOP
                         self._logger.info('New connection from %s:%d' % addr)
                         while not self._stop_loop and self.parent.is_init:
-                            if self.parent.mount and self.parent.mount.is_init:
+                            if self.parent.mount and self.parent.mount.is_init and self.parent.alignment.is_aligned and self.parent.alignment.is_located:
+                                # Receive go-to coordinates from Stellarium:
                                 try:
                                     data = conn.recv(1024)
                                     if data:
@@ -2308,8 +2309,12 @@ class StellariumTelescopeServer:
                                     self._stop_loop = True
                                     break
 
-                                mount_alt = self.parent.mount._state_cache['alt'] 
-                                mount_azi  = self.parent.mount._state_cache['azi'] 
+                                # Send mount coordinates to Stellarium:
+                                try:
+                                    mount_alt = self.parent.mount._state_cache['alt'] 
+                                    mount_azi  = self.parent.mount._state_cache['azi'] 
+                                except AttributeError:
+                                    continue
                                 mount_ra, mount_dec = (0, 0)
                                 icrs = apy_coord.ICRS()
                                 c = apy_coord.AltAz(
@@ -2322,7 +2327,13 @@ class StellariumTelescopeServer:
                                 mount_ra = (mount_ra + 360) % 360
                                 #print(mount_ra, mount_dec)
                                 position_report = struct.pack('<hhqLll', 24, 0, 0, int(mount_ra/180*2147483648), int(mount_dec/90*1073741824), 0) #ra, dec in degrees
-                                conn.send(position_report)
+                                #print([mount_alt, mount_azi, mount_ra, mount_dec])
+                                try:
+                                    conn.send(position_report)
+                                except:
+                                    pass                                    
+
+                            sleep(self._poll_period)
                             
                     except (socket.timeout, ConnectionResetError, ConnectionAbortedError):  # (no connection)
                         pass
