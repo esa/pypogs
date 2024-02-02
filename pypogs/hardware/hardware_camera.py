@@ -157,7 +157,7 @@ class Camera:
             self.identity = identity
         if name is not None:
             self.name = name
-        if auto_init and not None in (model, identity):
+        if auto_init and not None in (model, ):
             self._logger.debug('Trying to auto-initialise')
             self.initialize()
         else:
